@@ -9,17 +9,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DROWNING2003/pi-go/packages/agent/tool/guard"
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 )
 
-// BashTool implements shell command execution with timeout and cancel support.
+// BashTool implements shell command execution with timeout, cancel, and
+// destructive command guarding.
 type BashTool struct {
 	workspace      string
 	defaultTimeout time.Duration
+	guard          *guard.Guard
 }
 
 func NewBashTool(workspace string) *BashTool {
-	return &BashTool{workspace: workspace, defaultTimeout: 30 * time.Second}
+	return &BashTool{
+		workspace:      workspace,
+		defaultTimeout: 30 * time.Second,
+		guard:          guard.New(guard.DefaultRules()),
+	}
 }
 
 func (t *BashTool) Name() string { return "bash" }
@@ -46,6 +53,16 @@ func (t *BashTool) Execute(ctx context.Context, args json.RawMessage) (*Result, 
 
 	if params.Command == "" {
 		return &Result{Content: []model.ContentBlock{model.NewTextContent("empty command")}, IsError: true}, nil
+	}
+
+	// Check destructive command guard
+	if result := t.guard.Check(params.Command); result != nil {
+		return &Result{
+			Content: []model.ContentBlock{model.NewTextContent(
+				fmt.Sprintf("BLOCKED: %s\nTip: %s\nCommand: %s", result.Reason, result.Tip, result.Command),
+			)},
+			IsError: true,
+		}, nil
 	}
 
 	// Create context with timeout
