@@ -1,138 +1,66 @@
+// Package provider defines the Provider interface, Model catalog, and
+// authentication contracts for AI service providers.
+//
+// Providers encapsulate API-specific streaming logic and expose a uniform
+// interface consumed by the Agent loop. The faux (scriptable in-memory)
+// provider serves as the primary driver for all Agent tests.
 package provider
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"sync"
-	"time"
+	"encoding/json"
 
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 )
 
+// ProviderModel describes a concrete model available from a provider.
+type ProviderModel struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	API           string    `json:"api"`
+	Provider      string    `json:"provider"`
+	BaseURL       string    `json:"baseUrl"`
+	Reasoning     bool      `json:"reasoning"`
+	Input         []string  `json:"input"`
+	ContextWindow int       `json:"contextWindow"`
+	MaxTokens     int       `json:"maxTokens"`
+	Cost          ModelCost `json:"cost"`
+}
+
+// ModelCost captures per-million-token pricing.
+type ModelCost struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cacheRead"`
+	CacheWrite float64 `json:"cacheWrite"`
+}
+
+// Context is the conversation context sent with each provider request.
 type Context struct {
-	SystemPrompt string
-	Messages     []model.Message
+	SystemPrompt string            `json:"systemPrompt,omitempty"`
+	Messages     []json.RawMessage `json:"messages"`
+	Tools        []ToolDef         `json:"tools,omitempty"`
 }
 
-type Stream interface {
-	Events() <-chan model.StreamEvent
-	Result() (model.AssistantMessage, error)
-	Done() <-chan struct{}
+// ToolDef describes a tool available to the model.
+type ToolDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
 }
 
+// StreamOptions carries optional parameters for a provider stream request.
+type StreamOptions struct {
+	Temperature    float64
+	MaxTokens      int
+	APIKey         string
+	Transport      string
+	CacheRetention string
+	SessionID      string
+}
+
+// Provider is the uniform interface for AI service providers.
 type Provider interface {
-	ID() model.ProviderID
-	Models(context.Context) ([]model.Model, error)
-	Stream(context.Context, model.Model, Context) Stream
-}
-
-type FauxResponse struct {
-	Events []model.StreamEvent
-	Result model.AssistantMessage
-	Err    error
-	Delay  time.Duration
-}
-
-type FauxProvider struct {
-	mu        sync.Mutex
-	responses []FauxResponse
-	next      int
-}
-
-func NewFauxProvider(responses []FauxResponse) *FauxProvider {
-	return &FauxProvider{responses: append([]FauxResponse(nil), responses...)}
-}
-
-func (p *FauxProvider) ID() model.ProviderID { return "faux" }
-
-func (p *FauxProvider) Models(context.Context) ([]model.Model, error) {
-	return []model.Model{{ID: "test", Name: "Faux Test", API: "faux", Provider: p.ID(), Input: []string{"text"}}}, nil
-}
-
-func (p *FauxProvider) Stream(ctx context.Context, _ model.Model, _ Context) Stream {
-	p.mu.Lock()
-	if p.next >= len(p.responses) {
-		p.mu.Unlock()
-		return newFauxStream(ctx, FauxResponse{Err: errors.New("faux provider has no scripted response")})
-	}
-	response := p.responses[p.next]
-	p.next++
-	p.mu.Unlock()
-	return newFauxStream(ctx, response)
-}
-
-type fauxStream struct {
-	events chan model.StreamEvent
-	done   chan struct{}
-	result model.AssistantMessage
-	err    error
-}
-
-func newFauxStream(ctx context.Context, response FauxResponse) *fauxStream {
-	stream := &fauxStream{
-		events: make(chan model.StreamEvent, len(response.Events)+1),
-		done:   make(chan struct{}),
-	}
-	go stream.run(ctx, response)
-	return stream
-}
-
-func (s *fauxStream) Events() <-chan model.StreamEvent { return s.events }
-func (s *fauxStream) Done() <-chan struct{}            { return s.done }
-
-func (s *fauxStream) Result() (model.AssistantMessage, error) {
-	<-s.done
-	return s.result, s.err
-}
-
-func (s *fauxStream) run(ctx context.Context, response FauxResponse) {
-	defer close(s.events)
-	defer close(s.done)
-
-	if response.Delay > 0 {
-		timer := time.NewTimer(response.Delay)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			s.result = abortedResult(response.Result, ctx.Err())
-			s.err = ctx.Err()
-			return
-		}
-	}
-
-	for _, event := range response.Events {
-		select {
-		case s.events <- event:
-		case <-ctx.Done():
-			s.result = abortedResult(response.Result, ctx.Err())
-			s.err = ctx.Err()
-			return
-		}
-	}
-
-	if response.Err != nil {
-		s.result = response.Result
-		s.result.StopReason = model.StopReasonError
-		s.result.ErrorMessage = response.Err.Error()
-		select {
-		case s.events <- model.ErrorEvent{Type: "error", Reason: model.StopReasonError, Error: s.result}:
-		case <-ctx.Done():
-			s.result = abortedResult(response.Result, ctx.Err())
-			s.err = ctx.Err()
-			return
-		}
-		s.err = response.Err
-		return
-	}
-	s.result = response.Result
-}
-
-func abortedResult(result model.AssistantMessage, err error) model.AssistantMessage {
-	result.StopReason = model.StopReasonAborted
-	if err != nil {
-		result.ErrorMessage = fmt.Sprintf("stream aborted: %v", err)
-	}
-	return result
+	ID() string
+	Stream(ctx context.Context, m *ProviderModel, c *Context, opts *StreamOptions) <-chan model.StreamEvent
 }

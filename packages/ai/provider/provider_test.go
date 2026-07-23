@@ -2,76 +2,150 @@ package provider
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
+	"fmt"
 	"testing"
-	"time"
 
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 )
 
-func TestFauxProviderStreamsScriptedEventsAndResult(t *testing.T) {
-	assistant := model.AssistantMessage{Role: "assistant", Content: []model.ContentBlock{model.TextContent{Type: "text", Text: "hello"}}, API: "faux", Provider: "faux", Model: "test", StopReason: model.StopReasonStop, Timestamp: 2}
-	provider := NewFauxProvider([]FauxResponse{{
-		Events: []model.StreamEvent{model.StartEvent{Type: "start", Partial: assistant}},
-		Result: assistant,
-	}})
-
-	stream := provider.Stream(context.Background(), model.Model{ID: "test", Provider: "faux"}, Context{})
+func collectEvents(ch <-chan model.StreamEvent) []model.StreamEvent {
 	var events []model.StreamEvent
-	for event := range stream.Events() {
-		events = append(events, event)
+	for e := range ch {
+		events = append(events, e)
 	}
-	result, err := stream.Result()
-	if err != nil {
-		t.Fatalf("Stream.Result() error = %v", err)
+	return events
+}
+
+func TestFauxProvider_StreamText(t *testing.T) {
+	p := NewFauxProvider()
+	p.SetResponses(
+		FauxMessage{
+			Message: FauxAssistantMessage([]model.ContentBlock{
+				FauxText("hello world"),
+			}, model.StopReasonStop),
+		},
+	)
+
+	m := p.GetModel()
+	ctx := context.Background()
+	c := &Context{
+		SystemPrompt: "Be concise.",
+		Messages:     []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi","timestamp":1}`)},
 	}
-	if len(events) != 1 {
-		t.Fatalf("received %d events, want 1", len(events))
+
+	events := collectEvents(p.Stream(ctx, m, c, nil))
+
+	if p.CallCount() != 1 {
+		t.Errorf("callCount: got %d, want 1", p.CallCount())
 	}
-	if result.Model != "test" || result.StopReason != model.StopReasonStop {
-		t.Fatalf("result = %#v, want scripted assistant", result)
+
+	last := events[len(events)-1]
+	if last.Type != model.StreamEventDone {
+		t.Fatalf("last event type: got %q, want done", last.Type)
+	}
+	if last.Message == nil {
+		t.Fatal("done message is nil")
+	}
+	if len(last.Message.Content) != 1 || last.Message.Content[0].Text != "hello world" {
+		t.Errorf("content mismatch: %+v", last.Message.Content)
 	}
 }
 
-func TestFauxProviderEmitsStandardErrorEvent(t *testing.T) {
-	provider := NewFauxProvider([]FauxResponse{{
-		Result: model.AssistantMessage{Role: "assistant", API: "faux", Provider: "faux", Model: "test"},
-		Err:    errors.New("scripted failure"),
-	}})
-	stream := provider.Stream(context.Background(), model.Model{ID: "test", Provider: "faux"}, Context{})
+func TestFauxProvider_ErrorOnExhausted(t *testing.T) {
+	p := NewFauxProvider()
+	p.SetResponses(
+		FauxMessage{Message: FauxAssistantMessage([]model.ContentBlock{FauxText("first")}, model.StopReasonStop)},
+	)
 
-	var events []model.StreamEvent
-	for event := range stream.Events() {
-		events = append(events, event)
+	m := p.GetModel()
+	ctx := context.Background()
+	c := &Context{
+		Messages: []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi","timestamp":1}`)},
 	}
-	result, err := stream.Result()
-	if err == nil || err.Error() != "scripted failure" {
-		t.Fatalf("Stream.Result() error = %v, want scripted failure", err)
+
+	e1 := collectEvents(p.Stream(ctx, m, c, nil))
+	if e1[len(e1)-1].Type != model.StreamEventDone {
+		t.Fatal("first call should succeed")
 	}
-	if result.StopReason != model.StopReasonError || result.ErrorMessage != "scripted failure" {
-		t.Fatalf("error result = %#v, want standard error message", result)
-	}
-	if len(events) != 1 {
-		t.Fatalf("received %d events, want one error event", len(events))
-	}
-	errorEvent, ok := events[0].(model.ErrorEvent)
-	if !ok || errorEvent.Reason != model.StopReasonError || errorEvent.Error.ErrorMessage != "scripted failure" {
-		t.Fatalf("event = %#v, want standard error event", events[0])
+
+	e2 := collectEvents(p.Stream(ctx, m, c, nil))
+	last := e2[len(e2)-1]
+	if last.Type != model.StreamEventError {
+		t.Fatalf("expected error, got %q", last.Type)
 	}
 }
 
-func TestFauxProviderStopsAfterContextCancellation(t *testing.T) {
-	provider := NewFauxProvider([]FauxResponse{{
-		Delay:  time.Second,
-		Result: model.AssistantMessage{Role: "assistant", StopReason: model.StopReasonStop},
-	}})
+func TestFauxProvider_AbortBeforeFirstChunk(t *testing.T) {
+	p := NewFauxProvider(WithFauxTokensPerSecond(10))
+	p.SetResponses(
+		FauxMessage{Message: FauxAssistantMessage([]model.ContentBlock{FauxText("abcdefghij")}, model.StopReasonStop)},
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
-	stream := provider.Stream(ctx, model.Model{ID: "test", Provider: "faux"}, Context{})
 	cancel()
 
-	select {
-	case <-stream.Done():
-	case <-time.After(time.Second):
-		t.Fatal("faux stream did not stop after context cancellation")
+	m := p.GetModel()
+	c := &Context{
+		Messages: []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi","timestamp":1}`)},
 	}
+
+	events := collectEvents(p.Stream(ctx, m, c, nil))
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Type != model.StreamEventError {
+		t.Errorf("expected error, got %q", events[0].Type)
+	}
+}
+
+func TestFauxProvider_ExactEventOrder(t *testing.T) {
+	p := NewFauxProvider(WithFauxTokenSize(1, 1))
+	p.SetResponses(
+		FauxMessage{
+			Message: FauxAssistantMessage([]model.ContentBlock{
+				FauxThinking("go"),
+				FauxText("ok"),
+				FauxToolCall("tool-1", "echo", json.RawMessage(`{}`)),
+			}, model.StopReasonToolUse),
+		},
+	)
+
+	m := p.GetModel()
+	c := &Context{
+		Messages: []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi","timestamp":1}`)},
+	}
+
+	events := collectEvents(p.Stream(context.Background(), m, c, nil))
+	types := make([]string, len(events))
+	for i, e := range events {
+		types[i] = e.Type
+	}
+
+	expected := []string{
+		model.StreamEventStart,
+		model.StreamEventThinkingStart,
+		model.StreamEventThinkingDelta,
+		model.StreamEventThinkingEnd,
+		model.StreamEventTextStart,
+		model.StreamEventTextDelta,
+		model.StreamEventTextEnd,
+		model.StreamEventToolCallStart,
+		model.StreamEventToolCallDelta,
+		model.StreamEventToolCallEnd,
+		model.StreamEventDone,
+	}
+
+	if len(types) != len(expected) {
+		t.Fatalf("event count: got %d, want %d\nGot: %v", len(types), len(expected), types)
+	}
+	for i := range expected {
+		if types[i] != expected[i] {
+			t.Errorf("event[%d]: got %q, want %q", i, types[i], expected[i])
+		}
+	}
+}
+
+func itoa(n int) string {
+	return fmt.Sprintf("%d", n)
 }

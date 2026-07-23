@@ -1,252 +1,104 @@
 package model
 
-import (
-	"encoding/json"
-	"fmt"
+import "encoding/json"
+
+// StreamEvent types.
+const (
+	StreamEventStart         = "start"
+	StreamEventTextStart     = "text_start"
+	StreamEventTextDelta     = "text_delta"
+	StreamEventTextEnd       = "text_end"
+	StreamEventThinkingStart = "thinking_start"
+	StreamEventThinkingDelta = "thinking_delta"
+	StreamEventThinkingEnd   = "thinking_end"
+	StreamEventToolCallStart = "toolcall_start"
+	StreamEventToolCallDelta = "toolcall_delta"
+	StreamEventToolCallEnd   = "toolcall_end"
+	StreamEventDone          = "done"
+	StreamEventError         = "error"
 )
 
-type StreamEvent interface{ streamEvent() }
+// StreamEvent represents a single event in a provider response stream.
+type StreamEvent struct {
+	Type string `json:"type"`
 
-type StartEvent struct {
-	Type    string           `json:"type"`
-	Partial AssistantMessage `json:"partial"`
+	ContentIndex int               `json:"contentIndex,omitempty"`
+	Partial      *AssistantMessage `json:"partial,omitempty"`
+
+	Delta   string `json:"delta,omitempty"`
+	Content string `json:"content,omitempty"`
+
+	ToolCall *ContentBlock `json:"toolCall,omitempty"`
+
+	Reason  string            `json:"reason,omitempty"`
+	Message *AssistantMessage `json:"message,omitempty"`
+	Error   *AssistantMessage `json:"error,omitempty"`
 }
 
-func (StartEvent) streamEvent() {}
-
-type TextStartEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Partial      AssistantMessage `json:"partial"`
+// IsTerminal returns true if the event is "done" or "error".
+func (e *StreamEvent) IsTerminal() bool {
+	return e.Type == StreamEventDone || e.Type == StreamEventError
 }
 
-func (TextStartEvent) streamEvent() {}
-
-type TextDeltaEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Delta        string           `json:"delta"`
-	Partial      AssistantMessage `json:"partial"`
+// NewStartEvent creates a stream start event.
+func NewStartEvent(partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventStart, Partial: partial}
 }
 
-func (TextDeltaEvent) streamEvent() {}
-
-type TextEndEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Content      string           `json:"content"`
-	Partial      AssistantMessage `json:"partial"`
+// NewTextStartEvent creates a text_start event.
+func NewTextStartEvent(index int, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventTextStart, ContentIndex: index, Partial: partial}
 }
 
-func (TextEndEvent) streamEvent() {}
-
-type ThinkingStartEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Partial      AssistantMessage `json:"partial"`
+// NewTextDeltaEvent creates a text_delta event.
+func NewTextDeltaEvent(index int, delta string, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventTextDelta, ContentIndex: index, Delta: delta, Partial: partial}
 }
 
-func (ThinkingStartEvent) streamEvent() {}
-
-type ThinkingDeltaEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Delta        string           `json:"delta"`
-	Partial      AssistantMessage `json:"partial"`
+// NewTextEndEvent creates a text_end event.
+func NewTextEndEvent(index int, content string, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventTextEnd, ContentIndex: index, Content: content, Partial: partial}
 }
 
-func (ThinkingDeltaEvent) streamEvent() {}
-
-type ThinkingEndEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Content      string           `json:"content"`
-	Partial      AssistantMessage `json:"partial"`
+// NewThinkingStartEvent creates a thinking_start event.
+func NewThinkingStartEvent(index int, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventThinkingStart, ContentIndex: index, Partial: partial}
 }
 
-func (ThinkingEndEvent) streamEvent() {}
-
-type ToolCallStartEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Partial      AssistantMessage `json:"partial"`
+// NewThinkingDeltaEvent creates a thinking_delta event.
+func NewThinkingDeltaEvent(index int, delta string, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventThinkingDelta, ContentIndex: index, Delta: delta, Partial: partial}
 }
 
-func (ToolCallStartEvent) streamEvent() {}
-
-type ToolCallDeltaEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	Delta        string           `json:"delta"`
-	Partial      AssistantMessage `json:"partial"`
+// NewThinkingEndEvent creates a thinking_end event.
+func NewThinkingEndEvent(index int, content string, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventThinkingEnd, ContentIndex: index, Content: content, Partial: partial}
 }
 
-func (ToolCallDeltaEvent) streamEvent() {}
-
-type ToolCallEndEvent struct {
-	Type         string           `json:"type"`
-	ContentIndex int              `json:"contentIndex"`
-	ToolCall     ToolCall         `json:"toolCall"`
-	Partial      AssistantMessage `json:"partial"`
+// NewToolCallStartEvent creates a toolcall_start event.
+func NewToolCallStartEvent(index int, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventToolCallStart, ContentIndex: index, Partial: partial}
 }
 
-func (ToolCallEndEvent) streamEvent() {}
-
-type DoneEvent struct {
-	Type    string           `json:"type"`
-	Reason  StopReason       `json:"reason"`
-	Message AssistantMessage `json:"message"`
+// NewToolCallDeltaEvent creates a toolcall_delta event.
+func NewToolCallDeltaEvent(index int, delta string, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventToolCallDelta, ContentIndex: index, Delta: delta, Partial: partial}
 }
 
-func (DoneEvent) streamEvent() {}
-
-type ErrorEvent struct {
-	Type   string           `json:"type"`
-	Reason StopReason       `json:"reason"`
-	Error  AssistantMessage `json:"error"`
+// NewToolCallEndEvent creates a toolcall_end event.
+func NewToolCallEndEvent(index int, toolCall *ContentBlock, partial *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventToolCallEnd, ContentIndex: index, ToolCall: toolCall, Partial: partial}
 }
 
-func (ErrorEvent) streamEvent() {}
-
-func EncodeStreamEvent(event StreamEvent) ([]byte, error) {
-	if event == nil {
-		return nil, fmt.Errorf("stream event is nil")
-	}
-	return json.Marshal(event)
+// NewDoneEvent creates a terminal done event.
+func NewDoneEvent(reason StopReason, message *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventDone, Reason: string(reason), Message: message}
 }
 
-func DecodeStreamEvent(data []byte) (StreamEvent, error) {
-	var header struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(data, &header); err != nil {
-		return nil, fmt.Errorf("decode stream event type: %w", err)
-	}
-	switch header.Type {
-	case "start":
-		var raw struct {
-			Type    string          `json:"type"`
-			Partial json.RawMessage `json:"partial"`
-		}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("decode start event: %w", err)
-		}
-		partial, err := decodeAssistant(raw.Partial)
-		if err != nil {
-			return nil, err
-		}
-		return StartEvent{Type: raw.Type, Partial: partial}, nil
-	case "text_start":
-		return decodePartialEvent[TextStartEvent](data, header.Type)
-	case "text_delta":
-		return decodePartialEvent[TextDeltaEvent](data, header.Type)
-	case "text_end":
-		return decodePartialEvent[TextEndEvent](data, header.Type)
-	case "thinking_start":
-		return decodePartialEvent[ThinkingStartEvent](data, header.Type)
-	case "thinking_delta":
-		return decodePartialEvent[ThinkingDeltaEvent](data, header.Type)
-	case "thinking_end":
-		return decodePartialEvent[ThinkingEndEvent](data, header.Type)
-	case "toolcall_start":
-		return decodePartialEvent[ToolCallStartEvent](data, header.Type)
-	case "toolcall_delta":
-		return decodePartialEvent[ToolCallDeltaEvent](data, header.Type)
-	case "toolcall_end":
-		var raw struct {
-			Type         string          `json:"type"`
-			ContentIndex int             `json:"contentIndex"`
-			ToolCall     ToolCall        `json:"toolCall"`
-			Partial      json.RawMessage `json:"partial"`
-		}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("decode tool call end event: %w", err)
-		}
-		partial, err := decodeAssistant(raw.Partial)
-		if err != nil {
-			return nil, err
-		}
-		return ToolCallEndEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, ToolCall: raw.ToolCall, Partial: partial}, nil
-	case "done":
-		var raw struct {
-			Type    string          `json:"type"`
-			Reason  StopReason      `json:"reason"`
-			Message json.RawMessage `json:"message"`
-		}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("decode done event: %w", err)
-		}
-		message, err := decodeAssistant(raw.Message)
-		if err != nil {
-			return nil, err
-		}
-		return DoneEvent{Type: raw.Type, Reason: raw.Reason, Message: message}, nil
-	case "error":
-		var raw struct {
-			Type   string          `json:"type"`
-			Reason StopReason      `json:"reason"`
-			Error  json.RawMessage `json:"error"`
-		}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("decode error event: %w", err)
-		}
-		message, err := decodeAssistant(raw.Error)
-		if err != nil {
-			return nil, err
-		}
-		return ErrorEvent{Type: raw.Type, Reason: raw.Reason, Error: message}, nil
-	default:
-		return nil, fmt.Errorf("unknown stream event type %q", header.Type)
-	}
+// NewErrorEvent creates a terminal error event.
+func NewErrorEvent(reason StopReason, err *AssistantMessage) StreamEvent {
+	return StreamEvent{Type: StreamEventError, Reason: string(reason), Error: err}
 }
 
-func decodeAssistant(data json.RawMessage) (AssistantMessage, error) {
-	message, err := unmarshalMessage(data)
-	if err != nil {
-		return AssistantMessage{}, err
-	}
-	assistant, ok := message.(AssistantMessage)
-	if !ok {
-		return AssistantMessage{}, fmt.Errorf("stream event partial message is not assistant")
-	}
-	return assistant, nil
-}
-
-func decodePartialEvent[T StreamEvent](data []byte, eventType string) (T, error) {
-	var raw struct {
-		Type         string          `json:"type"`
-		ContentIndex int             `json:"contentIndex"`
-		Delta        string          `json:"delta"`
-		Content      string          `json:"content"`
-		Partial      json.RawMessage `json:"partial"`
-	}
-	var result T
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return result, fmt.Errorf("decode %s event: %w", eventType, err)
-	}
-	partial, err := decodeAssistant(raw.Partial)
-	if err != nil {
-		return result, err
-	}
-	switch any(result).(type) {
-	case TextStartEvent:
-		result = any(TextStartEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Partial: partial}).(T)
-	case TextDeltaEvent:
-		result = any(TextDeltaEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Delta: raw.Delta, Partial: partial}).(T)
-	case TextEndEvent:
-		result = any(TextEndEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Content: raw.Content, Partial: partial}).(T)
-	case ThinkingStartEvent:
-		result = any(ThinkingStartEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Partial: partial}).(T)
-	case ThinkingDeltaEvent:
-		result = any(ThinkingDeltaEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Delta: raw.Delta, Partial: partial}).(T)
-	case ThinkingEndEvent:
-		result = any(ThinkingEndEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Content: raw.Content, Partial: partial}).(T)
-	case ToolCallStartEvent:
-		result = any(ToolCallStartEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Partial: partial}).(T)
-	case ToolCallDeltaEvent:
-		result = any(ToolCallDeltaEvent{Type: raw.Type, ContentIndex: raw.ContentIndex, Delta: raw.Delta, Partial: partial}).(T)
-	default:
-		return result, fmt.Errorf("unsupported partial event type %q", eventType)
-	}
-	return result, nil
-}
+// Ensure json.RawMessage is used.
+var _ json.RawMessage
