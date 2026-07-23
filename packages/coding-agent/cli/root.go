@@ -26,6 +26,7 @@ import (
 type options struct {
 	Print     bool
 	List      bool
+	Continue  bool
 	Resume    string
 	Model     string
 	Provider  string
@@ -40,6 +41,7 @@ func parseFlags(args []string) (*options, []string, error) {
 	flags := pflag.NewFlagSet("pi", pflag.ContinueOnError)
 	flags.BoolVar(&opts.Print, "print", false, "Non-interactive print mode")
 	flags.BoolVar(&opts.List, "list", false, "List saved sessions")
+	flags.BoolVar(&opts.Continue, "continue", false, "Continue the latest session")
 	flags.StringVar(&opts.Resume, "resume", "", "Resume a session by ID prefix")
 	flags.StringVar(&opts.Model, "model", "", "Model to use (e.g. deepseek/deepseek-chat)")
 	flags.StringVar(&opts.Provider, "provider", "", "Provider to use (e.g. deepseek)")
@@ -147,9 +149,20 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	tools.Register(tool.NewEditTool(cwd))
 	tools.Register(tool.NewBashTool(cwd))
 
+	// Load previous session for --continue
+	var prevMsgs []json.RawMessage
+	if opts.Continue {
+		sessionsDir := filepath.Join(configDir, "sessions")
+		latest, err := session.Latest(sessionsDir)
+		if err == nil && latest != nil {
+			prevMsgs = latest.Entries
+			fmt.Fprintf(stderr, "continuing session %s (%d messages)...\n", latest.Header.ID, len(latest.Entries))
+		}
+	}
+
 	// Print mode
 	if opts.Print || len(remaining) > 0 {
-		return runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, remaining, cwd)
+		return runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, remaining, cwd, prevMsgs)
 	}
 
 	// Interactive mode placeholder
@@ -157,7 +170,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	return 1
 }
 
-func runPrintMode(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cfg *config.Config, opts *options, args []string, cwd string) int {
+func runPrintMode(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cfg *config.Config, opts *options, args []string, cwd string, prevMsgs []json.RawMessage) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "no prompt provided")
 		return 1
@@ -199,6 +212,18 @@ func runPrintMode(stdout, stderr io.Writer, m *provider.ProviderModel, prov *pro
 			ch <- model.NewErrorEvent(model.StopReasonError, &model.AssistantMessage{ErrorMessage: "unsupported API: " + prov.API})
 			close(ch)
 			return ch
+		}
+	}
+
+	// Inject previous session messages into stream context
+	baseStreamFn := streamFn
+	if len(prevMsgs) > 0 {
+		streamFn = func(ctx context.Context, pm *provider.ProviderModel, c *provider.Context, so *provider.StreamOptions) <-chan model.StreamEvent {
+			allMsgs := make([]json.RawMessage, 0, len(prevMsgs)+len(c.Messages))
+			allMsgs = append(allMsgs, prevMsgs...)
+			allMsgs = append(allMsgs, c.Messages...)
+			c.Messages = allMsgs
+			return baseStreamFn(ctx, pm, c, so)
 		}
 	}
 
