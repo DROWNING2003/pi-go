@@ -9,6 +9,7 @@ var builtinProviders = []*ProviderConfig{
 		AuthEnvVars: []string{"DEEPSEEK_API_KEY"},
 		Models: []ModelConfig{
 			{ID: "deepseek-chat", Name: "DeepSeek Chat", Reasoning: false, Input: []string{"text"}, ContextWindow: 65536, MaxTokens: 8192},
+			{ID: "deepseek-v4-flash", Name: "DeepSeek V4 Flash", Reasoning: false, Input: []string{"text"}, ContextWindow: 131072, MaxTokens: 16384},
 			{ID: "deepseek-reasoner", Name: "DeepSeek Reasoner", Reasoning: true, Input: []string{"text"}, ContextWindow: 65536, MaxTokens: 8192,
 				Cost: ModelCost{Input: 0.55, Output: 2.19, CacheRead: 0.14, CacheWrite: 0.55}},
 		},
