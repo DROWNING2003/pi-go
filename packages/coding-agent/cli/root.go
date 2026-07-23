@@ -85,7 +85,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 		return resumeSession(stdout, stderr, opts.Resume)
 	}
 	if opts.RPC {
-		return runRPCMode(stdout, stderr, version)
+		return runRPCMode(stdout, stderr, version, opts.Model)
 	}
 
 	// Default workspace

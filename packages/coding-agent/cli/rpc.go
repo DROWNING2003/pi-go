@@ -12,7 +12,7 @@ import (
 )
 
 // runRPCMode starts the JSON-RPC headless loop.
-func runRPCMode(stdout, stderr io.Writer, version string) int {
+func runRPCMode(stdout, stderr io.Writer, version string, modelRef string) int {
 	// Config
 	cwd, _ := os.Getwd()
 	configDir, _ := os.UserConfigDir()
@@ -24,7 +24,9 @@ func runRPCMode(stdout, stderr io.Writer, version string) int {
 	provider.RegisterBuiltins(reg)
 
 	// Default model
-	modelRef := cfg.Model
+	if modelRef == "" {
+		modelRef = cfg.Model
+	}
 	if modelRef == "" {
 		modelRef = "deepseek/deepseek-chat"
 	}
