@@ -37,7 +37,7 @@ func runRPCMode(stdout, stderr io.Writer, version string, modelRef string) int {
 	}
 
 	fmt.Fprintf(stderr, "pi-rpc %s (provider=%s, model=%s)\n", version, m.Provider, m.ID)
-	if err := rpc.RunRPC(reg, m); err != nil {
+	if err := rpc.RunRPC(reg, m, cwd); err != nil {
 		fmt.Fprintf(stderr, "rpc error: %v\n", err)
 		return 1
 	}
