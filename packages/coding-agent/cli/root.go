@@ -14,6 +14,7 @@ import (
 
 	"github.com/DROWNING2003/pi-go/packages/agent/event"
 	"github.com/DROWNING2003/pi-go/packages/agent/loop"
+	promptpkg "github.com/DROWNING2003/pi-go/packages/agent/prompt"
 	"github.com/DROWNING2003/pi-go/packages/agent/tool"
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 	"github.com/DROWNING2003/pi-go/packages/ai/protocol"
@@ -156,6 +157,19 @@ func runPrintMode(stdout, stderr io.Writer, m *provider.ProviderModel, prov *pro
 	systemPrompt := opts.System
 	if systemPrompt == "" {
 		systemPrompt = cfg.SystemPrompt
+	}
+	if systemPrompt == "" {
+		// Build default system prompt with project context
+		homeDir, _ := os.UserHomeDir()
+		contextFiles, _ := config.LoadContextFiles(cwd, homeDir)
+		skillsDir := filepath.Join(homeDir, ".agents", "skills")
+		skills := promptpkg.LoadSkills(skillsDir)
+		systemPrompt = promptpkg.Build(promptpkg.Options{
+			Base:         promptpkg.DefaultBase(),
+			ContextFiles: contextFiles,
+			Skills:       skills,
+			ToolNames:    promptpkg.ToolNames(tools),
+		})
 	}
 
 	streamFn := func(ctx context.Context, pm *provider.ProviderModel, c *provider.Context, so *provider.StreamOptions) <-chan model.StreamEvent {
