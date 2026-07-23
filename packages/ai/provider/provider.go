@@ -71,7 +71,7 @@ type fauxStream struct {
 
 func newFauxStream(ctx context.Context, response FauxResponse) *fauxStream {
 	stream := &fauxStream{
-		events: make(chan model.StreamEvent),
+		events: make(chan model.StreamEvent, len(response.Events)+1),
 		done:   make(chan struct{}),
 	}
 	go stream.run(ctx, response)
@@ -116,6 +116,13 @@ func (s *fauxStream) run(ctx context.Context, response FauxResponse) {
 		s.result = response.Result
 		s.result.StopReason = model.StopReasonError
 		s.result.ErrorMessage = response.Err.Error()
+		select {
+		case s.events <- model.ErrorEvent{Type: "error", Reason: model.StopReasonError, Error: s.result}:
+		case <-ctx.Done():
+			s.result = abortedResult(response.Result, ctx.Err())
+			s.err = ctx.Err()
+			return
+		}
 		s.err = response.Err
 		return
 	}
