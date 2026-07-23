@@ -10,35 +10,23 @@ import (
 
 func makeUserMsg() *model.UserMessage {
 	return &model.UserMessage{
-		Role:      "user",
-		Content:   model.UserContent{model.NewTextContent("hello")},
+		Role: "user", Content: model.UserContent{model.NewTextContent("hello")},
 		Timestamp: time.Now().UnixMilli(),
 	}
 }
-
 func makeAssistantMsg() *model.AssistantMessage {
 	return &model.AssistantMessage{
-		Role: "assistant",
-		Content: []model.ContentBlock{
-			model.NewTextContent("hi"),
-		},
-		API:        "test",
-		Provider:   "test",
-		Model:      "test",
-		Usage:      model.Usage{TotalTokens: 10},
-		StopReason: "stop",
-		Timestamp:  time.Now().UnixMilli(),
+		Role: "assistant", Content: []model.ContentBlock{model.NewTextContent("hi")},
+		API: "test", Provider: "test", Model: "test",
+		Usage: model.Usage{TotalTokens: 10}, StopReason: "stop",
+		Timestamp: time.Now().UnixMilli(),
 	}
 }
-
 func makeToolResultMsg() *model.ToolResultMessage {
 	return &model.ToolResultMessage{
-		Role:       "toolResult",
-		ToolCallID: "tool-1",
-		ToolName:   "read",
-		Content:    []model.ContentBlock{model.NewTextContent("ok")},
-		IsError:    false,
-		Timestamp:  time.Now().UnixMilli(),
+		Role: "toolResult", ToolCallID: "tool-1", ToolName: "read",
+		Content: []model.ContentBlock{model.NewTextContent("ok")},
+		IsError: false, Timestamp: time.Now().UnixMilli(),
 	}
 }
 
@@ -51,7 +39,6 @@ func TestMessage_RoundTrip(t *testing.T) {
 		{"assistant", NewAssistantMessage(makeAssistantMsg())},
 		{"toolResult", NewToolResultMessage(makeToolResultMsg())},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := json.Marshal(tt.msg)
@@ -70,10 +57,8 @@ func TestMessage_RoundTrip(t *testing.T) {
 }
 
 func TestMessage_InvalidRole(t *testing.T) {
-	data := `{"role":"unknown","data":42}`
 	var msg Message
-	err := json.Unmarshal([]byte(data), &msg)
-	if err == nil {
+	if err := json.Unmarshal([]byte(`{"role":"unknown"}`), &msg); err == nil {
 		t.Error("expected error for unknown role")
 	}
 }
@@ -88,13 +73,10 @@ func TestAgentEvent_RoundTrip(t *testing.T) {
 		{"turn_start", AgentEvent{Type: TypeTurnStart}},
 		{"message_start", AgentEvent{Type: TypeMessageStart, Payload: &Message{User: makeUserMsg()}}},
 		{"tool_execution_start", AgentEvent{
-			Type:       TypeToolExecutionStart,
-			ToolCallID: "tool-1",
-			ToolName:   "read",
-			Args:       json.RawMessage(`{"path":"/tmp"}`),
+			Type: TypeToolExecutionStart, ToolCallID: "tool-1", ToolName: "read",
+			Args: json.RawMessage(`{"path":"/tmp"}`),
 		}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := json.Marshal(tt.event)

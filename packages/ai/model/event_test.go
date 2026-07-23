@@ -8,14 +8,10 @@ import (
 
 func makePartial() *AssistantMessage {
 	return &AssistantMessage{
-		Role:       "assistant",
-		Content:    []ContentBlock{},
-		API:        "test",
-		Provider:   "test",
-		Model:      "test",
-		Usage:      Usage{},
-		StopReason: "stop",
-		Timestamp:  time.Now().UnixMilli(),
+		Role: "assistant", Content: []ContentBlock{},
+		API: "test", Provider: "test", Model: "test",
+		Usage: Usage{}, StopReason: "stop",
+		Timestamp: time.Now().UnixMilli(),
 	}
 }
 
@@ -37,7 +33,6 @@ func TestStreamEvent_RoundTrip(t *testing.T) {
 		{"done", NewDoneEvent("stop", makePartial()), StreamEventDone},
 		{"error", NewErrorEvent("error", makePartial()), StreamEventError},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := json.Marshal(tt.event)
@@ -59,35 +54,22 @@ func TestStreamEvent_DoneEvent(t *testing.T) {
 	partial := makePartial()
 	partial.StopReason = "toolUse"
 	event := NewDoneEvent("toolUse", partial)
-
 	data, _ := json.Marshal(event)
 	var decoded StreamEvent
 	json.Unmarshal(data, &decoded)
-
-	if !decoded.IsTerminal() {
-		t.Error("done should be terminal")
-	}
-	if decoded.Message == nil {
-		t.Fatal("Message is nil")
+	if !decoded.IsTerminal() || decoded.Message == nil {
+		t.Error("done event round-trip failed")
 	}
 }
 
 func TestStreamEvent_ErrorEvent(t *testing.T) {
 	partial := makePartial()
-	partial.ErrorMessage = "something went wrong"
+	partial.ErrorMessage = "boom"
 	event := NewErrorEvent("error", partial)
-
 	data, _ := json.Marshal(event)
 	var decoded StreamEvent
 	json.Unmarshal(data, &decoded)
-
-	if !decoded.IsTerminal() {
-		t.Error("error should be terminal")
-	}
-	if decoded.Error == nil {
-		t.Fatal("Error is nil")
-	}
-	if decoded.Error.ErrorMessage != "something went wrong" {
-		t.Errorf("errorMessage: %q", decoded.Error.ErrorMessage)
+	if !decoded.IsTerminal() || decoded.Error == nil || decoded.Error.ErrorMessage != "boom" {
+		t.Error("error event round-trip failed")
 	}
 }

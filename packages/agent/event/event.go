@@ -1,8 +1,4 @@
 // Package event defines the Agent lifecycle events emitted during an agent run.
-//
-// Events are consumed by UI components (TUI, print mode, RPC) to render
-// streaming progress, tool execution status, and session state. The event
-// stream is the primary contract between the Agent loop and all consumers.
 package event
 
 import (
@@ -11,7 +7,6 @@ import (
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 )
 
-// Agent event type constants.
 const (
 	TypeAgentStart          = "agent_start"
 	TypeAgentEnd            = "agent_end"
@@ -25,42 +20,30 @@ const (
 	TypeToolExecutionEnd    = "tool_execution_end"
 )
 
-// AgentEvent represents a single event emitted during an agent run.
 type AgentEvent struct {
 	Type string `json:"type"`
 
-	// agent_end
-	Messages []Message `json:"messages,omitempty"`
-
-	// turn_end
+	Messages    []Message                 `json:"messages,omitempty"`
 	Message     *Message                  `json:"message,omitempty"`
 	ToolResults []model.ToolResultMessage `json:"toolResults,omitempty"`
+	Payload     *Message                  `json:"payload,omitempty"`
 
-	// message_start / message_update / message_end
-	Payload *Message `json:"payload,omitempty"`
-
-	// message_update
 	AssistantMessageEvent *model.StreamEvent `json:"assistantMessageEvent,omitempty"`
 
-	// tool_execution_*
-	ToolCallID string          `json:"toolCallId,omitempty"`
-	ToolName   string          `json:"toolName,omitempty"`
-	Args       json.RawMessage `json:"args,omitempty"`
-
-	// tool_execution_update / tool_execution_end
+	ToolCallID    string          `json:"toolCallId,omitempty"`
+	ToolName      string          `json:"toolName,omitempty"`
+	Args          json.RawMessage `json:"args,omitempty"`
 	PartialResult json.RawMessage `json:"partialResult,omitempty"`
 	Result        json.RawMessage `json:"result,omitempty"`
 	IsError       bool            `json:"isError,omitempty"`
 }
 
-// Message is a union type that can hold any of the three message types.
 type Message struct {
 	User       *model.UserMessage
 	Assistant  *model.AssistantMessage
 	ToolResult *model.ToolResultMessage
 }
 
-// Role returns the message role.
 func (m *Message) Role() string {
 	switch {
 	case m.User != nil:
@@ -74,7 +57,6 @@ func (m *Message) Role() string {
 	}
 }
 
-// MarshalJSON implements json.Marshaler on the value receiver.
 func (m Message) MarshalJSON() ([]byte, error) {
 	switch {
 	case m.User != nil:
@@ -88,7 +70,6 @@ func (m Message) MarshalJSON() ([]byte, error) {
 	}
 }
 
-// UnmarshalJSON implements json.Unmarshaler by reading the role field first.
 func (m *Message) UnmarshalJSON(data []byte) error {
 	var role struct {
 		Role string `json:"role"`
@@ -111,17 +92,6 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 }
 
-// NewUserMessage creates a Message wrapping a UserMessage.
-func NewUserMessage(msg *model.UserMessage) Message {
-	return Message{User: msg}
-}
-
-// NewAssistantMessage creates a Message wrapping an AssistantMessage.
-func NewAssistantMessage(msg *model.AssistantMessage) Message {
-	return Message{Assistant: msg}
-}
-
-// NewToolResultMessage creates a Message wrapping a ToolResultMessage.
-func NewToolResultMessage(msg *model.ToolResultMessage) Message {
-	return Message{ToolResult: msg}
-}
+func NewUserMessage(msg *model.UserMessage) Message             { return Message{User: msg} }
+func NewAssistantMessage(msg *model.AssistantMessage) Message   { return Message{Assistant: msg} }
+func NewToolResultMessage(msg *model.ToolResultMessage) Message { return Message{ToolResult: msg} }
