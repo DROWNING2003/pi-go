@@ -42,13 +42,21 @@ type ModelConfig struct {
 	Cost          ModelCost
 }
 
+// AuthConfig describes how a provider authenticates.
+type AuthConfig struct {
+	Type    string   // "api_key" or "oauth"
+	Name    string   // human-readable name
+	EnvVars []string // environment variable names
+}
+
 // ProviderConfig describes a registered AI provider.
 type ProviderConfig struct {
 	ID          string
 	Name        string
 	BaseURL     string
 	API         string
-	AuthEnvVars []string
+	Auth        AuthConfig
+	AuthEnvVars []string // deprecated, use Auth.EnvVars
 	Models      []ModelConfig
 }
 
