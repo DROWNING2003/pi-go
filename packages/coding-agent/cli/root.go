@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -170,8 +171,9 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 		return runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, remaining, cwd, prevMsgs)
 	}
 
-	// Interactive mode placeholder
-	fmt.Fprintln(stderr, "interactive mode not yet implemented")
+	if !opts.Print && len(remaining) == 0 {
+		return runInteractive(stdout, stderr, m, prov, client, tools, cfg, cwd)
+	}
 	return 1
 }
 
@@ -358,5 +360,30 @@ func resumeSession(stdout, stderr io.Writer, idPrefix string) int {
 		return 1
 	}
 	fmt.Fprintf(stderr, "resuming session %s (%d messages)...\n", s.Header.ID, len(s.Entries))
+	return 0
+}
+
+func runInteractive(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cfg *config.Config, cwd string) int {
+	fmt.Fprintf(stderr, "pi ● %s/%s (type /quit to exit)\n\n", m.Provider, m.ID)
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Fprint(stderr, "> ")
+		if !scanner.Scan() {
+			break
+		}
+		input := strings.TrimSpace(scanner.Text())
+		if input == "" {
+			continue
+		}
+		if input == "/quit" || input == "/exit" {
+			break
+		}
+		args := []string{input}
+		opts := &options{Print: true}
+		code := runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, args, cwd, nil)
+		if code != 0 {
+			fmt.Fprintf(stderr, "error: command failed\n")
+		}
+	}
 	return 0
 }

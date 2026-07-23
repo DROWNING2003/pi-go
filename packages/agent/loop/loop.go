@@ -27,7 +27,8 @@ type Config struct {
 	StreamFn     StreamFunc
 	QueueManager *queue.Manager
 	Parallel     bool
-	OnEvent      func(evt model.StreamEvent) // optional callback for streaming
+	OnEvent      func(evt model.StreamEvent)
+	ConvertToLLM func(messages []json.RawMessage) []json.RawMessage
 }
 
 // Run executes the agent loop with the given prompt messages.
@@ -73,6 +74,10 @@ func Run(ctx context.Context, config *Config, prompts []*model.UserMessage) ([]e
 		c := &provider.Context{
 			SystemPrompt: config.SystemPrompt,
 			Messages:     ctxMessages,
+		}
+
+		if config.ConvertToLLM != nil {
+			c.Messages = config.ConvertToLLM(ctxMessages)
 		}
 
 		// Add tool definitions
