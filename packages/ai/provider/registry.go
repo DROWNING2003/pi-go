@@ -1,24 +1,40 @@
 package provider
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/DROWNING2003/pi-go/packages/ai/model"
 )
+
+// StreamDispatcher is a function that streams a model response.
+// It is registered per API type to avoid circular imports with the protocol package.
+type StreamDispatcher func(ctx context.Context, m *ProviderModel, c *Context, opts *StreamOptions) <-chan model.StreamEvent
 
 // Registry holds all registered providers and their models.
 type Registry struct {
-	mu        sync.RWMutex
-	providers map[string]*ProviderConfig
-	store     *CredentialStore
+	mu          sync.RWMutex
+	providers   map[string]*ProviderConfig
+	store       *CredentialStore
+	dispatchers map[string]StreamDispatcher
 }
 
 // NewRegistry creates a provider registry with an optional credential store.
 func NewRegistry(store *CredentialStore) *Registry {
-	r := &Registry{
-		providers: make(map[string]*ProviderConfig),
-		store:     store,
+	return &Registry{
+		providers:   make(map[string]*ProviderConfig),
+		store:       store,
+		dispatchers: make(map[string]StreamDispatcher),
 	}
-	return r
+}
+
+// SetDispatcher registers a stream dispatcher for an API type.
+func (r *Registry) SetDispatcher(api string, d StreamDispatcher) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dispatchers[api] = d
 }
 
 // Register adds a provider to the registry.
@@ -108,6 +124,29 @@ func (r *Registry) ResolveAPIKeyForProvider(providerID string, optsKey string) s
 		return ""
 	}
 	return ResolveAPIKey(r.store, providerID, prov.AuthEnvVars, optsKey)
+}
+
+// Stream dispatches a model request using the registered dispatcher for the model's API.
+func (r *Registry) Stream(ctx context.Context, modelRef string, c *Context, opts *StreamOptions) (<-chan model.StreamEvent, error) {
+	m := r.ResolveModel(modelRef)
+	if m == nil {
+		return nil, fmt.Errorf("model not found: %s", modelRef)
+	}
+
+	prov := r.GetProvider(m.Provider)
+	if prov == nil {
+		return nil, fmt.Errorf("provider not found: %s", m.Provider)
+	}
+
+	r.mu.RLock()
+	dispatch := r.dispatchers[prov.API]
+	r.mu.RUnlock()
+
+	if dispatch == nil {
+		return nil, fmt.Errorf("no dispatcher for API: %s", prov.API)
+	}
+
+	return dispatch(ctx, m, c, opts), nil
 }
 
 // RegisterBuiltins registers all built-in providers.
