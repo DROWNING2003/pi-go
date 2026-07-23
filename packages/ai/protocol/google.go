@@ -29,7 +29,7 @@ func StreamGoogleGenerate(ctx context.Context, client *HTTPClient, m *provider.P
 			Timestamp: time.Now().UnixMilli(),
 		}
 
-		req, err := buildGoogleRequest(m, c, opts)
+		req, err := buildGoogleRequest(c, opts)
 		if err != nil {
 			output.StopReason = model.StopReasonError
 			output.ErrorMessage = "build request: " + err.Error()
@@ -53,7 +53,7 @@ func StreamGoogleGenerate(ctx context.Context, client *HTTPClient, m *provider.P
 	return ch
 }
 
-func buildGoogleRequest(m *provider.ProviderModel, c *provider.Context, opts *provider.StreamOptions) (*GoogleGenerateRequest, error) {
+func buildGoogleRequest(c *provider.Context, opts *provider.StreamOptions) (*GoogleGenerateRequest, error) {
 	req := &GoogleGenerateRequest{
 		GenerationConfig: &GoogleGenConfig{},
 	}
