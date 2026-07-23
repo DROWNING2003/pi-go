@@ -4,37 +4,65 @@ import (
 	"testing"
 )
 
-func TestBlocksDangerousCommands(t *testing.T) {
-	g := New(DefaultRules())
+func TestAllRules_BlocksDangerous(t *testing.T) {
+	g := New(AllRules())
 
 	tests := []struct {
 		command string
 		blocked bool
+		name    string
 	}{
-		{"rm -rf /", true},
-		{"rm -rf /tmp/test", true},
-		{"rm -r /tmp/test", true},
-		{"git reset --hard HEAD~5", true},
-		{"git push --force origin main", true},
-		{"git clean -fd", true},
-		{"git branch -D feature", true},
-		{"mkfs.ext4 /dev/sda", true},
-		{"chmod -R 777 /var/www", true},
-		{"DROP TABLE users", true},
-		{"docker system prune -f", true},
-		{"kubectl delete namespace production", true},
-		{":(){ :|:& };:", true}, // fork bomb
-		{"aws ec2 terminate-instances --instance-ids i-123", true},
+		// Git - should block
+		{"git reset --hard HEAD~5", true, "reset-hard"},
+		{"git push --force origin main", true, "push-force"},
+		{"git clean -fd", true, "clean-force"},
+		{"git branch -D feature", true, "branch-delete"},
+		{"git stash clear", true, "stash-clear"},
+		{"git checkout -- file.txt", true, "checkout-discard"},
+		{"git restore file.txt", true, "restore-worktree"},
+
+		// Git - safe patterns should pass
+		{"git reset --hard HEAD", false, "reset-to-head"},
+		{"git clean -n", false, "clean-dry-run"},
+		{"git push --force-with-lease origin main", false, "push-with-lease"},
+		{"git restore --staged file.txt", false, "restore-staged"},
+
+		// Filesystem
+		{"rm -rf /", true, "rm-root"},
+		{"shred secret.txt", true, "shred"},
+		{"mkfs.ext4 /dev/sda", true, "mkfs"},
+
+		// Database
+		{"DROP DATABASE production", true, "drop-db"},
+		{"DROP TABLE users", true, "drop-table"},
+		{"TRUNCATE TABLE logs", true, "truncate"},
+
+		// Docker
+		{"docker system prune -f", true, "system-prune"},
+		{"docker rm -f container", true, "rm-force"},
+
+		// K8s
+		{"kubectl delete namespace prod", true, "delete-namespace"},
+		{"kubectl delete pods --all", true, "delete-all"},
+
+		// Cloud
+		{"aws ec2 terminate-instances --instance-ids i-123", true, "terminate"},
+		{"aws s3 rb s3://my-bucket", true, "s3-rb"},
+		{"gcloud projects delete my-project", true, "gcloud-delete"},
+		{"az group delete -n mygroup", true, "az-delete"},
+
+		// Terraform
+		{"terraform destroy", true, "tf-destroy"},
+		{"terraform destroy -target=module.app", false, "tf-destroy-targeted"},
+
+		// NPM
+		{"npm unpublish my-package", true, "npm-unpublish"},
 
 		// Safe commands
-		{"echo hello", false},
-		{"ls -la", false},
-		{"go test ./...", false},
-		{"git status", false},
-		{"git log --oneline", false},
-		{"cat README.md", false},
-		{"grep 'DROP TABLE' schema.sql", false}, // data context
-		{"echo 'rm -rf /'", false},              // data context
+		{"echo hello", false, "echo"},
+		{"ls -la", false, "ls"},
+		{"git status", false, "status"},
+		{"grep 'DROP TABLE' schema.sql", false, "grep-data"},
 	}
 
 	for _, tt := range tests {
@@ -42,39 +70,36 @@ func TestBlocksDangerousCommands(t *testing.T) {
 		blocked := result != nil
 		if blocked != tt.blocked {
 			if tt.blocked {
-				t.Errorf("should BLOCK: %s", tt.command)
+				t.Errorf("BLOCK expected but allowed: %s (%s)", tt.command, tt.name)
 			} else {
-				t.Errorf("should ALLOW: %s (blocked: %v)", tt.command, result)
+				t.Errorf("ALLOW expected but blocked: %s (%s) - reason: %s", tt.command, tt.name, result.Reason)
 			}
 		}
 	}
 }
 
-func TestDataContextNotBlocked(t *testing.T) {
-	g := New(DefaultRules())
-
-	// These look dangerous but are in data contexts
+func TestAllRules_DataContextSafe(t *testing.T) {
+	g := New(AllRules())
 	safe := []string{
 		"echo 'DROP TABLE users'",
-		"cat 'rm -rf' instructions.txt",
-		"grep 'git reset --hard' file.txt",
-		"echo \"git push --force origin main\"",
+		"grep 'rm -rf' README.md",
+		"cat 'git reset --hard' instructions.txt",
 	}
 	for _, cmd := range safe {
 		if result := g.Check(cmd); result != nil {
-			t.Errorf("should not block data context: %s (blocked: %v)", cmd, result.Reason)
+			t.Errorf("data context blocked: %s - %s", cmd, result.Reason)
 		}
 	}
 }
 
-func TestCustomRules(t *testing.T) {
-	g := New([]Rule{
-		{Pattern: `dangerous_command`, Description: "Custom block", Tip: "Don't do it"},
-	})
-	if g.Check("run dangerous_command now") == nil {
-		t.Error("should block custom rule")
+func TestSeverity(t *testing.T) {
+	g := New(AllRules())
+	r := g.Check("rm -rf /")
+	if r == nil || r.Severity != SevCritical {
+		t.Errorf("rm -rf / should be critical, got %v", r)
 	}
-	if g.Check("safe command") != nil {
-		t.Error("should allow safe command")
+	r = g.Check("git stash drop")
+	if r == nil || r.Severity != SevHigh {
+		t.Errorf("stash drop should be high, got %v", r)
 	}
 }

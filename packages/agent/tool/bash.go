@@ -28,7 +28,7 @@ func NewBashTool(workspace string) *BashTool {
 	return &BashTool{
 		workspace:      workspace,
 		defaultTimeout: 30 * time.Second,
-		guard:          guard.New(guard.DefaultRules()),
+		guard:          guard.New(guard.AllRules()),
 		sandbox:        sandbox.New(sandboxCfg),
 	}
 }
