@@ -19,9 +19,12 @@ import (
 	"github.com/DROWNING2003/pi-go/packages/agent/tool"
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 	"github.com/DROWNING2003/pi-go/packages/ai/protocol"
+
 	"github.com/DROWNING2003/pi-go/packages/ai/provider"
+	tui2 "github.com/DROWNING2003/pi-go/packages/coding-agent/tui"
 	"github.com/DROWNING2003/pi-go/packages/storage/config"
 	"github.com/DROWNING2003/pi-go/packages/storage/session"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type options struct {
@@ -173,7 +176,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	}
 
 	if !opts.Print && len(remaining) == 0 {
-		return runInteractive(stdout, stderr, m, prov, client, tools, cfg, cwd)
+		return runTUI(stdout, stderr, m, prov, client, tools, cwd)
 	}
 	return 1
 }
@@ -385,6 +388,15 @@ func runInteractive(stdout, stderr io.Writer, m *provider.ProviderModel, prov *p
 		if code != 0 {
 			fmt.Fprintf(stderr, "error: command failed\n")
 		}
+	}
+	return 0
+}
+
+func runTUI(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cwd string) int {
+	p := tui2.New(m, prov, client, tools, cwd)
+	if _, err := tea.NewProgram(p, tea.WithAltScreen()).Run(); err != nil {
+		fmt.Fprintf(stderr, "tui error: %v\n", err)
+		return 1
 	}
 	return 0
 }
