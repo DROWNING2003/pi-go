@@ -13,54 +13,43 @@ import (
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 )
 
-// ProviderModel describes a concrete model available from a provider.
-type ProviderModel struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	API           string    `json:"api"`
-	Provider      string    `json:"provider"`
-	BaseURL       string    `json:"baseUrl"`
-	Reasoning     bool      `json:"reasoning"`
-	Input         []string  `json:"input"`
-	ContextWindow int       `json:"contextWindow"`
-	MaxTokens     int       `json:"maxTokens"`
-	Cost          ModelCost `json:"cost"`
-}
+// Re-exports from model for backward compatibility.
+type (
+	Context       = model.Context
+	ToolDef       = model.ToolDef
+	StreamOptions = model.StreamOptions
+	UnifiedModel  = model.UnifiedModel
+	ModelCost     = model.ModelCost
+)
 
-// ModelCost captures per-million-token pricing.
-type ModelCost struct {
-	Input      float64 `json:"input"`
-	Output     float64 `json:"output"`
-	CacheRead  float64 `json:"cacheRead"`
-	CacheWrite float64 `json:"cacheWrite"`
-}
-
-// Context is the conversation context sent with each provider request.
-type Context struct {
-	SystemPrompt string            `json:"systemPrompt,omitempty"`
-	Messages     []json.RawMessage `json:"messages"`
-	Tools        []ToolDef         `json:"tools,omitempty"`
-}
-
-// ToolDef describes a tool available to the model.
-type ToolDef struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
-}
-
-// StreamOptions carries optional parameters for a provider stream request.
-type StreamOptions struct {
-	Temperature    float64
-	MaxTokens      int
-	APIKey         string
-	Transport      string
-	CacheRetention string
-	SessionID      string
-}
+// ProviderModel is a concrete model available from a provider (backward compat).
+type ProviderModel = model.UnifiedModel
 
 // Provider is the uniform interface for AI service providers.
 type Provider interface {
 	ID() string
 	Stream(ctx context.Context, m *ProviderModel, c *Context, opts *StreamOptions) <-chan model.StreamEvent
 }
+
+// ModelConfig is a provider-specific model definition for registration.
+type ModelConfig struct {
+	ID            string
+	Name          string
+	Reasoning     bool
+	Input         []string
+	ContextWindow int
+	MaxTokens     int
+	Cost          ModelCost
+}
+
+// ProviderConfig describes a registered AI provider.
+type ProviderConfig struct {
+	ID          string
+	Name        string
+	BaseURL     string
+	API         string
+	AuthEnvVars []string
+	Models      []ModelConfig
+}
+
+var _ = json.RawMessage{}

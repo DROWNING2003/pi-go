@@ -5,27 +5,6 @@ import (
 	"sync"
 )
 
-// ProviderConfig describes a registered AI provider.
-type ProviderConfig struct {
-	ID          string
-	Name        string
-	BaseURL     string
-	API         string // "openai-completions", "anthropic-messages", etc.
-	AuthEnvVars []string
-	Models      []ModelConfig
-}
-
-// ModelConfig is a provider-specific model definition.
-type ModelConfig struct {
-	ID            string
-	Name          string
-	Reasoning     bool
-	Input         []string
-	ContextWindow int
-	MaxTokens     int
-	Cost          ModelCost
-}
-
 // Registry holds all registered providers and their models.
 type Registry struct {
 	mu        sync.RWMutex
@@ -83,8 +62,8 @@ func (r *Registry) GetModel(providerID, modelID string) *ProviderModel {
 				BaseURL:       prov.BaseURL,
 				Reasoning:     mc.Reasoning,
 				Input:         mc.Input,
-				ContextWindow: mc.ContextWindow,
-				MaxTokens:     mc.MaxTokens,
+				ContextWindow: int64(mc.ContextWindow),
+				MaxTokens:     int64(mc.MaxTokens),
 				Cost:          mc.Cost,
 			}
 		}
@@ -112,8 +91,8 @@ func (r *Registry) ResolveModel(ref string) *ProviderModel {
 					BaseURL:       prov.BaseURL,
 					Reasoning:     mc.Reasoning,
 					Input:         mc.Input,
-					ContextWindow: mc.ContextWindow,
-					MaxTokens:     mc.MaxTokens,
+					ContextWindow: int64(mc.ContextWindow),
+					MaxTokens:     int64(mc.MaxTokens),
 					Cost:          mc.Cost,
 				}
 			}
