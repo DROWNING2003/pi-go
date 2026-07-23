@@ -154,6 +154,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	tools.Register(tool.NewWriteTool(cwd))
 	tools.Register(tool.NewEditTool(cwd))
 	tools.Register(tool.NewBashTool(cwd))
+	tools.Register(tool.NewWebFetchTool())
 
 	// Load previous session for --continue
 	var prevMsgs []json.RawMessage

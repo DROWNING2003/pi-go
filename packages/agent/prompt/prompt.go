@@ -227,7 +227,7 @@ func escapeXML(s string) string {
 
 func ToolNames(reg *tool.Registry) []string {
 	var names []string
-	for _, name := range []string{"read", "write", "edit", "bash"} {
+	for _, name := range []string{"read", "write", "edit", "bash", "web_fetch"} {
 		if reg.Get(name) != nil {
 			names = append(names, name)
 		}
