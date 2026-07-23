@@ -13,50 +13,39 @@ import (
 
 // Skill represents a loaded skill definition.
 type Skill struct {
-	Name        string
-	Description string
-	FilePath    string
+	Name                   string
+	Description            string
+	FilePath               string
+	Content                string
+	DisableModelInvocation bool
 }
 
 // Build constructs a system prompt for the agent.
 func Build(opts Options) string {
 	var parts []string
-
-	// Base instruction
 	if opts.Base != "" {
 		parts = append(parts, opts.Base)
 	}
-
-	// Project context (AGENTS.md, CLAUDE.md)
 	if len(opts.ContextFiles) > 0 {
-		parts = append(parts, "")
-		parts = append(parts, "<project_context>")
+		parts = append(parts, "", "<project_context>")
 		for _, f := range opts.ContextFiles {
 			parts = append(parts, f)
 		}
 		parts = append(parts, "</project_context>")
 	}
-
-	// Available skills
 	if len(opts.Skills) > 0 {
-		parts = append(parts, "")
-		parts = append(parts, formatSkills(opts.Skills))
+		parts = append(parts, "", formatSkills(opts.Skills))
 	}
-
-	// Available tools
 	if len(opts.ToolNames) > 0 {
 		sort.Strings(opts.ToolNames)
-		parts = append(parts, "")
-		parts = append(parts, "You have access to the following tools:")
+		parts = append(parts, "", "You have access to the following tools:")
 		for _, name := range opts.ToolNames {
 			parts = append(parts, fmt.Sprintf("- %s", name))
 		}
 	}
-
 	return strings.Join(parts, "\n")
 }
 
-// Options configures the system prompt builder.
 type Options struct {
 	Base         string
 	ContextFiles []string
@@ -64,7 +53,6 @@ type Options struct {
 	ToolNames    []string
 }
 
-// DefaultBase returns the default base system prompt.
 func DefaultBase() string {
 	return `You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.
 
@@ -76,63 +64,150 @@ Guidelines:
 - Be concise in your responses`
 }
 
-// LoadSkills scans a directory for SKILL.md files and returns parsed skills.
+// LoadSkills recursively scans a directory for SKILL.md files, respecting .gitignore.
 func LoadSkills(skillsDir string) []Skill {
+	return loadSkillsRecursive(skillsDir, skillsDir, loadIgnoreRules(skillsDir))
+}
+
+func loadSkillsRecursive(rootDir, currentDir string, ig *ignoreMatcher) []Skill {
 	var skills []Skill
-	entries, err := os.ReadDir(skillsDir)
+	entries, err := os.ReadDir(currentDir)
 	if err != nil {
 		return nil
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if entry.Name() == "SKILL.md" && !entry.IsDir() {
+			skillPath := filepath.Join(currentDir, entry.Name())
+			relPath, _ := filepath.Rel(rootDir, skillPath)
+			if ig != nil && ig.matches(relPath) {
+				continue
+			}
+			data, err := os.ReadFile(skillPath)
+			if err != nil {
+				continue
+			}
+			skill := parseSkillFile(filepath.Base(currentDir), string(data), skillPath)
+			if skill != nil {
+				skills = append(skills, *skill)
+			}
+			return skills // Only one SKILL.md per directory
+		}
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || entry.Name() == "node_modules" {
 			continue
 		}
-		skillPath := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
-		data, err := os.ReadFile(skillPath)
-		if err != nil {
+		subDir := filepath.Join(currentDir, entry.Name())
+		relPath, _ := filepath.Rel(rootDir, subDir)
+		if ig != nil && ig.matches(relPath+"/") {
 			continue
 		}
-		skill := parseSkillFile(entry.Name(), string(data), skillPath)
-		if skill != nil {
-			skills = append(skills, *skill)
-		}
+		skills = append(skills, loadSkillsRecursive(rootDir, subDir, ig)...)
 	}
 	return skills
 }
 
-func parseSkillFile(name, content, path string) *Skill {
-	// Parse name from first heading or use directory name
-	skill := &Skill{
-		Name:     name,
-		FilePath: path,
-	}
+type ignoreMatcher struct {
+	patterns []string
+}
 
-	lines := strings.Split(content, "\n")
-	if len(lines) > 0 && strings.HasPrefix(lines[0], "# ") {
-		skill.Name = strings.TrimPrefix(lines[0], "# ")
-	}
-
-	// Find description: first non-empty, non-heading paragraph
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+func loadIgnoreRules(dir string) *ignoreMatcher {
+	var patterns []string
+	for _, name := range []string{".gitignore", ".ignore"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
 			continue
 		}
-		skill.Description = line
-		break
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			patterns = append(patterns, line)
+		}
 	}
+	if len(patterns) == 0 {
+		return nil
+	}
+	return &ignoreMatcher{patterns: patterns}
+}
 
+func (ig *ignoreMatcher) matches(path string) bool {
+	for _, p := range ig.patterns {
+		p = strings.TrimPrefix(p, "/")
+		negate := false
+		if strings.HasPrefix(p, "!") {
+			negate = true
+			p = p[1:]
+		}
+		matched, _ := filepath.Match(p, path)
+		if !matched {
+			matched, _ = filepath.Match(p, filepath.Base(path))
+		}
+		if matched {
+			return !negate
+		}
+	}
+	return false
+}
+
+func parseSkillFile(name, content, path string) *Skill {
+	skill := &Skill{Name: name, FilePath: path, Content: content}
+	// Parse YAML frontmatter
+	if strings.HasPrefix(content, "---\n") {
+		end := strings.Index(content[4:], "\n---\n")
+		if end > 0 {
+			fm := content[4 : end+4]
+			skill.Content = strings.TrimSpace(content[end+9:])
+			for _, line := range strings.Split(fm, "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "name:") {
+					skill.Name = strings.TrimSpace(strings.TrimPrefix(line, "name:"))
+				} else if strings.HasPrefix(line, "description:") {
+					skill.Description = strings.TrimSpace(strings.TrimPrefix(line, "description:"))
+				} else if strings.HasPrefix(line, "disable-model-invocation:") {
+					skill.DisableModelInvocation = strings.TrimSpace(strings.TrimPrefix(line, "disable-model-invocation:")) == "true"
+				}
+			}
+		}
+	}
+	// Fallback: extract name from first heading
+	if skill.Name == name {
+		for _, line := range strings.Split(skill.Content, "\n") {
+			if strings.HasPrefix(line, "# ") {
+				skill.Name = strings.TrimPrefix(line, "# ")
+				break
+			}
+		}
+	}
+	if skill.Description == "" {
+		for _, line := range strings.Split(skill.Content, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" && !strings.HasPrefix(line, "#") {
+				skill.Description = line
+				break
+			}
+		}
+	}
 	return skill
 }
 
 func formatSkills(skills []Skill) string {
+	visible := make([]Skill, 0)
+	for _, s := range skills {
+		if !s.DisableModelInvocation {
+			visible = append(visible, s)
+		}
+	}
+	if len(visible) == 0 {
+		return ""
+	}
 	var lines []string
 	lines = append(lines, "The following skills provide specialized instructions for specific tasks.")
 	lines = append(lines, "Use the read tool to load a skill file when the task matches its description.")
-	lines = append(lines, "")
-	lines = append(lines, "<available_skills>")
-	for _, s := range skills {
-		lines = append(lines, fmt.Sprintf("  <skill>"))
+	lines = append(lines, "", "<available_skills>")
+	for _, s := range visible {
+		lines = append(lines, "  <skill>")
 		lines = append(lines, fmt.Sprintf("    <name>%s</name>", escapeXML(s.Name)))
 		lines = append(lines, fmt.Sprintf("    <description>%s</description>", escapeXML(s.Description)))
 		lines = append(lines, fmt.Sprintf("    <location>%s</location>", escapeXML(s.FilePath)))
@@ -147,15 +222,11 @@ func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&apos;")
 	return s
 }
 
-// ToolNames returns the names of all tools in a registry.
 func ToolNames(reg *tool.Registry) []string {
-	// We can't iterate the registry's internal map directly,
-	// so we check the four built-in tools.
-	names := []string{}
+	var names []string
 	for _, name := range []string{"read", "write", "edit", "bash"} {
 		if reg.Get(name) != nil {
 			names = append(names, name)
