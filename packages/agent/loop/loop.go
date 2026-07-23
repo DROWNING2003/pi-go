@@ -26,7 +26,8 @@ type Config struct {
 	MaxTurns     int
 	StreamFn     StreamFunc
 	QueueManager *queue.Manager
-	Parallel     bool // execute tool calls in parallel (default: true)
+	Parallel     bool
+	OnEvent      func(evt model.StreamEvent) // optional callback for streaming
 }
 
 // Run executes the agent loop with the given prompt messages.
@@ -81,6 +82,9 @@ func Run(ctx context.Context, config *Config, prompts []*model.UserMessage) ([]e
 		ch := config.StreamFn(ctx, config.Model, c, nil)
 		var assistantMsg *model.AssistantMessage
 		for evt := range ch {
+			if config.OnEvent != nil {
+				config.OnEvent(evt)
+			}
 			switch evt.Type {
 			case model.StreamEventDone:
 				assistantMsg = evt.Message

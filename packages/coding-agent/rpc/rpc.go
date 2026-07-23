@@ -323,6 +323,27 @@ func (h *Handler) handlePrompt(cmd Command) {
 		MaxTurns:     10,
 		StreamFn:     streamFn,
 		QueueManager: h.qm,
+		OnEvent: func(evt model.StreamEvent) {
+			switch evt.Type {
+			case model.StreamEventTextDelta:
+				h.emit(Event{Type: "text_delta", Data: evt.Delta})
+			case model.StreamEventThinkingDelta:
+				h.emit(Event{Type: "thinking_delta", Data: evt.Delta})
+			case model.StreamEventToolCallDelta:
+				h.emit(Event{Type: "toolcall_delta", Data: evt.Delta})
+			case model.StreamEventToolCallStart:
+				h.emit(Event{Type: "toolcall_start", Data: map[string]interface{}{
+					"index": evt.ContentIndex,
+				}})
+			case model.StreamEventToolCallEnd:
+				if evt.ToolCall != nil {
+					h.emit(Event{Type: "toolcall_end", Data: map[string]interface{}{
+						"id": evt.ToolCall.ID, "name": evt.ToolCall.Name,
+						"arguments": json.RawMessage(evt.ToolCall.Arguments),
+					}})
+				}
+			}
+		},
 	}
 
 	userMsg := &model.UserMessage{
