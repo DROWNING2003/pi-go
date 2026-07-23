@@ -301,14 +301,15 @@ func parseAnthropicStream(ch chan<- model.StreamEvent, m *provider.ProviderModel
 				continue
 			}
 			// Finalize arguments for tool calls
-			if block.Type == model.ContentTypeToolCall {
+			switch block.Type {
+			case model.ContentTypeToolCall:
 				if sb, ok := toolInputs[idx]; ok {
 					block.Arguments = json.RawMessage(sb.String())
 				}
 				ch <- model.NewToolCallEndEvent(idx, cpContent(block), cpAssistant(partial))
-			} else if block.Type == model.ContentTypeText {
+			case model.ContentTypeText:
 				ch <- model.NewTextEndEvent(idx, block.Text, cpAssistant(partial))
-			} else if block.Type == model.ContentTypeThinking {
+			case model.ContentTypeThinking:
 				ch <- model.NewThinkingEndEvent(idx, block.Thinking, cpAssistant(partial))
 			}
 

@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
@@ -144,8 +143,4 @@ func TestFauxProvider_ExactEventOrder(t *testing.T) {
 			t.Errorf("event[%d]: got %q, want %q", i, types[i], expected[i])
 		}
 	}
-}
-
-func itoa(n int) string {
-	return fmt.Sprintf("%d", n)
 }

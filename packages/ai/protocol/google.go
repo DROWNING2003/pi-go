@@ -329,9 +329,10 @@ func parseGoogleStream(ch chan<- model.StreamEvent, output *model.AssistantMessa
 
 func endBlock(b *model.ContentBlock, blocks *[]model.ContentBlock, output *model.AssistantMessage, ch chan<- model.StreamEvent) {
 	idx := findBlockIndex(blocks, b)
-	if b.Type == model.ContentTypeText {
+	switch b.Type {
+	case model.ContentTypeText:
 		ch <- model.NewTextEndEvent(idx, b.Text, cpAssistant(output))
-	} else if b.Type == model.ContentTypeThinking {
+	case model.ContentTypeThinking:
 		ch <- model.NewThinkingEndEvent(idx, b.Thinking, cpAssistant(output))
 	}
 }
