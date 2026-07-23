@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 	"github.com/DROWNING2003/pi-go/packages/ai/provider"
@@ -27,21 +28,68 @@ func NormalizeToolCallID(id string) string {
 	return strings.TrimRight(sanitized, "_")
 }
 
-// TransformMessages prepares messages for a target model:
-// 1. Downgrades images for non-vision models
-// 2. Converts thinking blocks to text for cross-model
-// 3. Normalizes tool call IDs
-// 4. Drops thought signatures for cross-model
+// TransformMessages prepares messages for a target model.
+// It handles: image downgrade, thinking conversion, tool call ID normalization,
+// thought signature cleanup, and orphaned tool call insertion.
 func TransformMessages(messages []json.RawMessage, m *provider.ProviderModel) []json.RawMessage {
 	result := make([]json.RawMessage, 0, len(messages))
-	toolCallIDMap := make(map[string]string) // original → normalized
+	toolCallIDMap := make(map[string]string)
+	var pendingToolCalls []model.ContentBlock
+	existingToolResults := make(map[string]bool)
+
+	insertSynthetic := func() {
+		for _, tc := range pendingToolCalls {
+			if !existingToolResults[tc.ID] {
+				tr := model.ToolResultMessage{
+					Role: "toolResult", ToolCallID: tc.ID, ToolName: tc.Name,
+					Content: []model.ContentBlock{model.NewTextContent("No result provided")},
+					IsError: true, Timestamp: time.Now().UnixMilli(),
+				}
+				data, _ := json.Marshal(tr)
+				result = append(result, data)
+			}
+		}
+		pendingToolCalls = nil
+		existingToolResults = make(map[string]bool)
+	}
 
 	for _, raw := range messages {
+		var header struct{ Role string }
+		if json.Unmarshal(raw, &header) != nil {
+			result = append(result, raw)
+			continue
+		}
+
+		// Insert synthetic tool results before non-toolResult messages
+		if header.Role != "toolResult" && len(pendingToolCalls) > 0 {
+			insertSynthetic()
+		}
+		if header.Role == "assistant" {
+			var am model.AssistantMessage
+			if json.Unmarshal(raw, &am) == nil {
+				if am.StopReason == model.StopReasonError || am.StopReason == model.StopReasonAborted {
+					continue // skip errored/aborted
+				}
+				for _, b := range am.Content {
+					if b.Type == model.ContentTypeToolCall {
+						pendingToolCalls = append(pendingToolCalls, b)
+					}
+				}
+			}
+		}
+		if header.Role == "toolResult" {
+			var trm model.ToolResultMessage
+			if json.Unmarshal(raw, &trm) == nil {
+				existingToolResults[trm.ToolCallID] = true
+			}
+		}
+
 		transformed := transformOne(raw, m, toolCallIDMap)
 		if transformed != nil {
 			result = append(result, transformed)
 		}
 	}
+	insertSynthetic()
 	return result
 }
 

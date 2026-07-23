@@ -67,3 +67,55 @@ func TestNormalizeToolCallID(t *testing.T) {
 		t.Errorf("too long: %d", len(result))
 	}
 }
+
+func TestTransformMessages_OrphanedToolCalls(t *testing.T) {
+	// Tool call without tool result should get synthetic empty result inserted
+	asstWithTool := model.AssistantMessage{
+		Role: "assistant", API: "faux", Provider: "faux",
+		Content: []model.ContentBlock{
+			model.NewToolCallContent("call-1", "read", json.RawMessage(`{"path":"/tmp"}`)),
+		},
+		StopReason: model.StopReasonToolUse,
+		Usage:      model.Usage{},
+	}
+	userMsg := model.UserMessage{Role: "user", Content: model.UserContent{model.NewTextContent("hi")}, Timestamp: 1}
+	asstData, _ := json.Marshal(asstWithTool)
+	userData, _ := json.Marshal(userMsg)
+
+	m := &provider.ProviderModel{API: "faux", Provider: "faux", Input: []string{"text"}}
+
+	result := TransformMessages([]json.RawMessage{userData, asstData, userData}, m)
+	// Should have: user, assistant(toolCall), synthetic toolResult, user
+	if len(result) < 4 {
+		t.Fatalf("expected >=4 messages, got %d", len(result))
+	}
+	// Third message should be the synthetic toolResult
+	var tr model.ToolResultMessage
+	if json.Unmarshal(result[2], &tr) == nil {
+		if tr.IsError != true || tr.ToolCallID != "call-1" {
+			t.Errorf("synthetic tool result: %+v", tr)
+		}
+	} else {
+		t.Error("third message should be toolResult")
+	}
+}
+
+func TestTransformMessages_SkipAborted(t *testing.T) {
+	// Aborted assistant messages should be skipped
+	asstAborted := model.AssistantMessage{
+		Role: "assistant", API: "faux", Provider: "faux",
+		StopReason:   model.StopReasonAborted,
+		ErrorMessage: "aborted",
+		Usage:        model.Usage{},
+	}
+	userMsg := model.UserMessage{Role: "user", Content: model.UserContent{model.NewTextContent("hi")}, Timestamp: 1}
+	asstData, _ := json.Marshal(asstAborted)
+	userData, _ := json.Marshal(userMsg)
+
+	m := &provider.ProviderModel{Input: []string{"text"}}
+	result := TransformMessages([]json.RawMessage{userData, asstData, userData}, m)
+	// Aborted should be removed, only user-user remains
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+}
