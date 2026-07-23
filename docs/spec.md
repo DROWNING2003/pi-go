@@ -16,7 +16,17 @@
 
 ## 2. Objective
 
-### 2.1 产品目标
+### 2.1 Core-first 产品目标
+
+第一阶段先交付可独立测试和复用的 Core，不先实现完整 TUI、扩展或 server。Core 的完成链路为：
+
+```text
+packages/ai -> packages/agent -> packages/storage
+```
+
+`packages/coding-agent` 只作为薄组装入口保留；TUI、扩展和 server 进入 Core checkpoint 之后的独立阶段。
+
+### 2.2 产品目标
 
 构建一个独立的纯 Go `pi` CLI，保留当前 Pi 的核心用户工作流：
 
@@ -31,7 +41,7 @@
   -> 下次恢复并继续
 ```
 
-### 2.2 用户
+### 2.3 用户
 
 主要用户是需要在终端中使用 coding agent 的开发者。用户关心：
 
@@ -42,7 +52,7 @@
 - TUI 是否能适应不同终端尺寸和中英文输入
 - 出错时是否能获得可诊断的信息，而不是静默丢失状态
 
-### 2.3 必须支持的功能
+### 2.4 最终必须支持的功能
 
 - Interactive TUI、print mode、JSONL/RPC mode
 - 多行编辑、粘贴、文件引用、slash command 补全
@@ -63,12 +73,22 @@
 
 - **语言和工具链**：Go 1.26.1，使用 `go 1.26.1`/`toolchain go1.26.1` 固定开发和 CI 版本
 - **依赖管理**：Go Modules；第三方依赖在评审后以 `go.mod`/`go.sum` 锁定明确版本，禁止提交未审核的 `@latest` 解析结果
-- **入口**：`cmd/pi/main.go`
+- **入口**：`packages/coding-agent/cmd/pi/main.go`
 - **并发**：goroutine、channel、`context.Context`
 - **日志**：标准库 `log/slog`
 - **JSON/JSONL**：标准库 `encoding/json`
 
-### 3.2 TUI
+### 3.2 Core package 技术边界
+
+- **AI**：`packages/ai/model`、`packages/ai/provider`、`packages/ai/protocol`
+- **Agent**：`packages/agent/loop`、`packages/agent/event`、`packages/agent/tool`、`packages/agent/queue`
+- **Storage**：`packages/storage/session`、`packages/storage/config`
+- **组装层**：`packages/coding-agent`
+- **后续阶段**：`packages/tui`、`packages/extension`、`packages/server`
+
+Core 包不能依赖 TUI、扩展或 server；TUI 只能订阅 Agent event。
+
+### 3.3 TUI
 
 - **TUI 框架**：Bubble Tea
 - **样式和主题**：Lip Gloss
@@ -80,7 +100,7 @@
 
 不从零实现完整的终端渲染框架。Bubble Tea 负责状态循环，Lip Gloss 负责样式；只在协议兼容性测试证明必要时补充底层 ANSI 处理。
 
-### 3.3 Provider 和网络
+### 3.4 Provider 和网络
 
 - **HTTP**：标准库 `net/http`
 - **取消和超时**：`context.Context`
@@ -89,7 +109,7 @@
 - **Provider 分层**：Provider 适配器 + 共享 wire protocol 客户端
 - **协议首批顺序**：OpenAI-compatible Completions、OpenAI Responses、Anthropic Messages、Google Generative AI
 
-### 3.4 存储和配置
+### 3.5 存储和配置
 
 - **Session**：继续读取现有 JSONL；临时文件 + rename 原子写入
 - **配置**：JSON 文件，兼容全局/项目配置和现有环境变量
@@ -97,7 +117,7 @@
 - **可选索引**：`modernc.org/sqlite`，第一版不强制依赖数据库
 - **路径**：`os.UserConfigDir`、`os.UserHomeDir` 和项目目录
 
-### 3.5 CLI、扩展和构建
+### 3.6 CLI、扩展和构建
 
 - **CLI**：Cobra + PFlag
 - **RPC**：stdin/stdout 上的版本化 JSONL
@@ -115,7 +135,7 @@
 
 ```bash
 # 格式化
-gofmt -w ./cmd ./internal
+gofmt -w ./packages
 
 # 静态检查
 go vet ./...
@@ -132,9 +152,9 @@ go test ./... -coverprofile=coverage.out
 go tool cover -func=coverage.out
 
 # 构建本地二进制
-go build -trimpath -ldflags "-X main.version=dev" -o ./bin/pi ./cmd/pi
+go build -trimpath -ldflags "-X main.version=dev" -o ./bin/pi ./packages/coding-agent/cmd/pi
 
-# 启动开发版 TUI
+# 启动当前开发版 CLI
 ./bin/pi
 ```
 
@@ -172,35 +192,34 @@ go build -trimpath -ldflags "-X main.version=dev" -o ./bin/pi ./cmd/pi
 ### 发布验证
 
 ```bash
-GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/pi-darwin-arm64 ./cmd/pi
-GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/pi-darwin-amd64 ./cmd/pi
-GOOS=linux GOARCH=amd64 go build -trimpath -o dist/pi-linux-amd64 ./cmd/pi
-GOOS=linux GOARCH=arm64 go build -trimpath -o dist/pi-linux-arm64 ./cmd/pi
+GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/pi-darwin-arm64 ./packages/coding-agent/cmd/pi
+GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/pi-darwin-amd64 ./packages/coding-agent/cmd/pi
+GOOS=linux GOARCH=amd64 go build -trimpath -o dist/pi-linux-amd64 ./packages/coding-agent/cmd/pi
+GOOS=linux GOARCH=arm64 go build -trimpath -o dist/pi-linux-arm64 ./packages/coding-agent/cmd/pi
 shasum -a 256 dist/*
 ```
 
 ## 5. Project Structure
 
 ```text
-cmd/pi/main.go              CLI 入口
-internal/model/              消息、内容块、模型、usage、错误
-internal/provider/           Provider interface、模型目录、认证
-internal/protocol/           OpenAI、Anthropic、Google、SSE 客户端
-internal/agent/              Agent loop、事件、队列、工具调度
-internal/tool/               read、write、edit、bash、schema
-internal/session/            JSONL、恢复、分支、compaction、export
-internal/config/             settings、context files、trust、环境变量
-internal/cli/                参数、slash commands、退出码
-internal/rpc/                JSONL/RPC server 和 client
-internal/tui/                Bubble Tea model、页面、组件、主题
-internal/terminal/           raw mode、resize、ANSI、图片
-internal/extension/          子进程 JSON-RPC 扩展协议
-pkg/                         只有确需对外复用的稳定包
-testdata/providers/          Provider HTTP 和事件 fixture
-testdata/sessions/           旧版和新版 Session fixture
-testdata/tui/                TUI golden fixture
-scripts/                     迁移、fixture、构建和发布脚本
-docs/                        用户文档、协议和迁移文档
+packages/ai/model/           标准消息、内容块、usage、错误
+packages/ai/provider/        Provider interface、模型目录、认证
+packages/ai/protocol/        OpenAI、Anthropic、Google、SSE 客户端
+packages/agent/loop/         Agent loop 和状态机
+packages/agent/event/        Agent lifecycle event
+packages/agent/tool/         read、write、edit、bash 和 schema
+packages/agent/queue/        abort、continue、steering、follow-up
+packages/storage/session/    JSONL、恢复、分支和原子写入
+packages/storage/config/     settings、context files、trust、凭据
+packages/coding-agent/       CLI 组装层
+packages/tui/                后续 Bubble Tea TUI
+packages/extension/          后续 JSON-RPC 扩展
+packages/server/             后续 server 模式
+testdata/model/              Message 和 event fixture
+testdata/provider/           Provider stream fixture
+testdata/session/             旧版、分支和损坏 Session fixture
+scripts/                     parity、迁移、构建和发布
+docs/                        Spec、Plan、Tasks 和兼容矩阵
 ```
 
 依赖方向必须保持单向：
@@ -212,7 +231,7 @@ model
   -> cli/rpc/tui
 ```
 
-`internal/tui` 不得直接调用 Provider；`internal/provider` 不得依赖 TUI；CLI 只负责组装依赖和启动模式。
+`packages/tui` 不得直接调用 Provider；`packages/ai/provider` 不得依赖 TUI；CLI 只负责组装 Core 依赖和启动模式。
 
 ## 6. Code Style
 

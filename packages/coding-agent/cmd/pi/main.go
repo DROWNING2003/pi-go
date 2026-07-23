@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/DROWNING2003/pi-go/internal/cli"
+	"github.com/DROWNING2003/pi-go/packages/coding-agent/cli"
 )
 
 var version = "dev"
