@@ -4,9 +4,9 @@
 
 | 领域 | 行为 | 首发目标 | 验收来源 | 状态 |
 |---|---|---|---|---|
-| AI | Model、Message、ContentBlock、Usage、StopReason | 必须兼容 | `testdata/model/messages.jsonl` + model tests | PR #5 实现，待 CI |
-| AI | Stream event：text、thinking、toolcall、done、error | 必须兼容 | event round-trip tests | PR #5 实现，待 CI |
-| AI | Provider interface 和 faux Provider | 必须兼容 | scripted provider tests + race test | PR #5 实现，待 CI |
+| AI | Model、Message、ContentBlock、Usage、StopReason | 必须兼容 | `testdata/model/messages.jsonl` + model tests | PR #5 已实现，CI 通过 |
+| AI | Stream event：text、thinking、toolcall、done、error | 必须兼容 | event round-trip tests | PR #5 已实现，CI 通过 |
+| AI | Provider interface 和 faux Provider | 必须兼容 | scripted provider tests + race test | PR #5 已实现，CI 通过 |
 | CLI | `--help`、`--version`、退出码 | 必须兼容 | 现有 CLI 行为 + Go 单测 | 基线骨架已建立 |
 | CLI | interactive、print、RPC | 必须兼容 | Spec + 集成测试 | 待基线 |
 | Agent | 文本和 thinking 流 | 必须兼容 | faux provider fixture | 待基线 |
