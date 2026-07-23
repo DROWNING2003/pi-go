@@ -25,6 +25,8 @@ import (
 
 type options struct {
 	Print     bool
+	List      bool
+	Resume    string
 	Model     string
 	Provider  string
 	System    string
@@ -37,6 +39,8 @@ func parseFlags(args []string) (*options, []string, error) {
 	opts := &options{}
 	flags := pflag.NewFlagSet("pi", pflag.ContinueOnError)
 	flags.BoolVar(&opts.Print, "print", false, "Non-interactive print mode")
+	flags.BoolVar(&opts.List, "list", false, "List saved sessions")
+	flags.StringVar(&opts.Resume, "resume", "", "Resume a session by ID prefix")
 	flags.StringVar(&opts.Model, "model", "", "Model to use (e.g. deepseek/deepseek-chat)")
 	flags.StringVar(&opts.Provider, "provider", "", "Provider to use (e.g. deepseek)")
 	flags.StringVar(&opts.System, "system", "", "System prompt override")
@@ -67,6 +71,14 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	if err != nil {
 		fmt.Fprintln(stderr, "unknown option:", strings.TrimPrefix(err.Error(), "unknown flag: "))
 		return 2
+	}
+
+	// Commands that don't need API key
+	if opts.List {
+		return listSessions(stdout, stderr)
+	}
+	if opts.Resume != "" {
+		return resumeSession(stdout, stderr, opts.Resume)
 	}
 
 	// Default workspace
@@ -289,3 +301,32 @@ Environment:
   ANTHROPIC_API_KEY  Anthropic API key
   GOOGLE_API_KEY     Google API key
 `
+
+func listSessions(stdout, stderr io.Writer) int {
+	sessionsDir := filepath.Join(configDir(), "sessions")
+	sessions, err := session.List(sessionsDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "list sessions: %v\n", err)
+		return 1
+	}
+	if len(sessions) == 0 {
+		fmt.Fprintln(stdout, "No saved sessions.")
+		return 0
+	}
+	fmt.Fprintf(stdout, "%-20s  %-20s  %s\n", "ID", "TIME", "MESSAGES")
+	for _, s := range sessions {
+		fmt.Fprintf(stdout, "%-20s  %-20s  %d\n", s.ID, s.Timestamp, s.Entries)
+	}
+	return 0
+}
+
+func resumeSession(stdout, stderr io.Writer, idPrefix string) int {
+	sessionsDir := filepath.Join(configDir(), "sessions")
+	s, err := session.FindByID(sessionsDir, idPrefix)
+	if err != nil || s == nil {
+		fmt.Fprintf(stderr, "session not found: %s\n", idPrefix)
+		return 1
+	}
+	fmt.Fprintf(stderr, "resuming session %s (%d messages)...\n", s.Header.ID, len(s.Entries))
+	return 0
+}
