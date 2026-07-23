@@ -31,6 +31,8 @@ import (
 type (
 	// ContentBlock represents any content block in a message.
 	ContentBlock = model.ContentBlock
+	// UserContent is polymorphic content (string or []ContentBlock).
+	UserContent = model.UserContent
 	// Usage represents token usage and cost.
 	Usage = model.Usage
 	// UsageCost represents cost breakdown.
@@ -144,12 +146,32 @@ type (
 
 // Registry constructors.
 var (
-	NewRegistry       = provider.NewRegistry
-	RegisterBuiltins  = provider.RegisterBuiltins
+	NewRegistry        = provider.NewRegistry
+	RegisterBuiltins   = provider.RegisterBuiltins
 	NewCredentialStore = provider.NewCredentialStore
-	ResolveAPIKey     = provider.ResolveAPIKey
-	DetectCompat      = provider.DetectCompat
-	NewFauxProvider   = provider.NewFauxProvider
+	ResolveAPIKey      = provider.ResolveAPIKey
+	DetectCompat       = provider.DetectCompat
+)
+
+// Faux provider types for testing.
+type (
+	FauxProvider        = provider.FauxProvider
+	FauxResponseStep    = provider.FauxResponseStep
+	FauxMessage         = provider.FauxMessage
+	FauxResponseFactory = provider.FauxResponseFactory
+	FauxProviderOption  = provider.FauxProviderOption
+)
+
+var (
+	NewFauxProvider         = provider.NewFauxProvider
+	FauxText                = provider.FauxText
+	FauxThinking            = provider.FauxThinking
+	FauxToolCall            = provider.FauxToolCall
+	FauxAssistantMessage    = provider.FauxAssistantMessage
+	WithFauxID              = provider.WithFauxID
+	WithFauxModels          = provider.WithFauxModels
+	WithFauxTokenSize       = provider.WithFauxTokenSize
+	WithFauxTokensPerSecond = provider.WithFauxTokensPerSecond
 )
 
 // --- Protocol types ---
@@ -167,12 +189,12 @@ type (
 
 // Protocol constructors and helpers.
 var (
-	NewHTTPClient       = protocol.NewHTTPClient
-	NewSSEParser        = protocol.NewSSEParser
-	NewJSONLinesParser  = protocol.NewJSONLinesParser
-	SanitizeHeaders     = protocol.SanitizeHeaders
-	StreamChatCompletion   = protocol.StreamChatCompletion
-	StreamOpenAIResponses  = protocol.StreamOpenAIResponses
+	NewHTTPClient           = protocol.NewHTTPClient
+	NewSSEParser            = protocol.NewSSEParser
+	NewJSONLinesParser      = protocol.NewJSONLinesParser
+	SanitizeHeaders         = protocol.SanitizeHeaders
+	StreamChatCompletion    = protocol.StreamChatCompletion
+	StreamOpenAIResponses   = protocol.StreamOpenAIResponses
 	StreamAnthropicMessages = protocol.StreamAnthropicMessages
-	StreamGoogleGenerate   = protocol.StreamGoogleGenerate
+	StreamGoogleGenerate    = protocol.StreamGoogleGenerate
 )

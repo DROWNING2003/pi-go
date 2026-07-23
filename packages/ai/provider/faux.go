@@ -38,7 +38,7 @@ type FauxProvider struct {
 
 // FauxResponseStep is either a final AssistantMessage or a factory function.
 type FauxResponseStep interface {
-	isFauxResponseStep()
+	IsFauxResponseStep()
 }
 
 // FauxMessage is a pre-built AssistantMessage used as a response step.
@@ -46,12 +46,12 @@ type FauxMessage struct {
 	Message *model.AssistantMessage
 }
 
-func (FauxMessage) isFauxResponseStep() {}
+func (FauxMessage) IsFauxResponseStep() {}
 
 // FauxResponseFactory produces an AssistantMessage from request context.
 type FauxResponseFactory func(ctx context.Context, m *ProviderModel, c *Context, opts *StreamOptions, callCount int) *model.AssistantMessage
 
-func (FauxResponseFactory) isFauxResponseStep() {}
+func (FauxResponseFactory) IsFauxResponseStep() {}
 
 // FauxProviderOption configures a FauxProvider during construction.
 type FauxProviderOption func(*FauxProvider)
