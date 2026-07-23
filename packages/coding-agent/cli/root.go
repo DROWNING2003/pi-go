@@ -27,6 +27,7 @@ type options struct {
 	Print     bool
 	List      bool
 	Continue  bool
+	RPC       bool
 	Resume    string
 	Model     string
 	Provider  string
@@ -42,6 +43,7 @@ func parseFlags(args []string) (*options, []string, error) {
 	flags.BoolVar(&opts.Print, "print", false, "Non-interactive print mode")
 	flags.BoolVar(&opts.List, "list", false, "List saved sessions")
 	flags.BoolVar(&opts.Continue, "continue", false, "Continue the latest session")
+	flags.BoolVar(&opts.RPC, "rpc", false, "Run in JSON-RPC headless mode")
 	flags.StringVar(&opts.Resume, "resume", "", "Resume a session by ID prefix")
 	flags.StringVar(&opts.Model, "model", "", "Model to use (e.g. deepseek/deepseek-chat)")
 	flags.StringVar(&opts.Provider, "provider", "", "Provider to use (e.g. deepseek)")
@@ -81,6 +83,9 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	}
 	if opts.Resume != "" {
 		return resumeSession(stdout, stderr, opts.Resume)
+	}
+	if opts.RPC {
+		return runRPCMode(stdout, stderr, version)
 	}
 
 	// Default workspace
