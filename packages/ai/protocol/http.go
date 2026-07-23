@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/DROWNING2003/pi-go/packages/ai/protocol/retry"
 )
 
 // HTTPClient wraps net/http.Client with streaming helpers for provider APIs.
@@ -34,9 +36,7 @@ func (c *HTTPClient) WithTimeout(timeoutMs int) *HTTPClient {
 	return c
 }
 
-// DoStream sends a POST request with a JSON body and returns a buffered reader
-// over the response body for SSE/stream parsing. The caller must close the
-// response body.
+// DoStream sends a POST request with JSON body and retries on transient errors.
 func (c *HTTPClient) DoStream(ctx context.Context, path string, body interface{}, headers map[string]string) (*http.Response, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -44,32 +44,35 @@ func (c *HTTPClient) DoStream(ctx context.Context, path string, body interface{}
 	}
 
 	url := c.baseURL + path
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream, application/json")
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
+	return retry.DoWithValue(ctx, retry.DefaultConfig(), func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("http request: %w", err)
-	}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream, application/json")
+		for k, v := range c.headers {
+			req.Header.Set(k, v)
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, &HTTPError{StatusCode: resp.StatusCode, Body: string(body)}
-	}
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("http request: %w", err)
+		}
 
-	return resp, nil
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, &HTTPError{StatusCode: resp.StatusCode, Body: string(body)}
+		}
+
+		return resp, nil
+	})
 }
 
 // HTTPError represents a non-2xx HTTP response.
