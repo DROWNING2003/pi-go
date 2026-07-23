@@ -121,7 +121,7 @@ func StreamAnthropicMessages(ctx context.Context, client *HTTPClient, m *provide
 		}
 		defer resp.Body.Close()
 
-		parseAnthropicStream(ctx, ch, m, resp.Body)
+		parseAnthropicStream(ch, m, resp.Body)
 	}()
 
 	return ch
@@ -204,7 +204,7 @@ func convertContentBlocks(blocks []model.ContentBlock) []AnthropicContent {
 	return out
 }
 
-func parseAnthropicStream(ctx context.Context, ch chan<- model.StreamEvent, m *provider.ProviderModel, body io.Reader) {
+func parseAnthropicStream(ch chan<- model.StreamEvent, m *provider.ProviderModel, body io.Reader) {
 	parser := NewSSEParser(body)
 
 	partial := &model.AssistantMessage{
