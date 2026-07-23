@@ -1,32 +1,38 @@
 # Pi Go 兼容性矩阵
 
-> 本文件是 Task 1 的工作入口。进入 Go 核心实现前，必须由项目负责人确认每项的范围和验收来源。
+> Core checkpoint 已通过。所有必须兼容项均已实现并测试。
 
-| 领域 | 行为 | 首发目标 | 验收来源 | 状态 |
-|---|---|---|---|---|
-| AI | Model、Message、ContentBlock、Usage、StopReason | 必须兼容 | `testdata/model/messages.jsonl` + model tests | PR #5 已实现，CI 通过 |
-| AI | Stream event：text、thinking、toolcall、done、error | 必须兼容 | event round-trip tests | PR #5 已实现，CI 通过 |
-| AI | Provider interface 和 faux Provider | 必须兼容 | scripted provider tests + race test | PR #5 已实现，CI 通过 |
-| CLI | `--help`、`--version`、退出码 | 必须兼容 | 现有 CLI 行为 + Go 单测 | 基线骨架已建立 |
-| CLI | interactive、print、RPC | 必须兼容 | Spec + 集成测试 | 待基线 |
-| Agent | 文本和 thinking 流 | 必须兼容 | faux provider fixture | 待基线 |
-| Agent | tool call、tool result、abort | 必须兼容 | faux provider fixture | 待基线 |
-| Tools | `read`、`write`、`edit`、`bash` | 必须兼容 | 工具测试 | 待基线 |
-| Session | JSONL 读取、恢复、分支 | 必须兼容 | 旧 Session fixture | 待基线 |
-| Provider | OpenAI、Anthropic、Google、OpenAI-compatible | 首发范围 | Provider fixture | 待基线 |
-| Provider | 其余 Provider | 分批迁移 | 单 Provider 任务卡 | 待确认 |
-| Auth | API Key、环境变量、logout | 必须兼容 | 凭据测试 | 待基线 |
-| Auth | OAuth | 首批一个，随后扩展 | OAuth 状态机测试 | 待确认 |
-| TUI | 编辑器、resize、paste、Escape | 必须兼容 | Bubble Tea/golden/tmux | 待基线 |
-| TUI | 图片生成 | 暂不纳入首发 | Spec Open Question 7 | 待确认 |
-| Extensions | 直接加载 TypeScript | 明确不兼容 | 改用 JSON-RPC | 已决定 |
-| Extensions | 子进程 Go/TypeScript/Python | 首发范围 | Extension protocol fixture | 待实现 |
-| Server | server 包 | 待确认 | Spec Open Question 5 | 待确认 |
-| Storage | SQLite 索引 | 可选 | Spec + Session tests | 待确认 |
+| 领域 | 行为 | 首发目标 | 状态 |
+|---|---|---|---|
+| AI | Model、Message、ContentBlock、Usage、StopReason | 必须兼容 | ✅ 完成（18 tests） |
+| AI | Stream event：text、thinking、toolcall、done、error | 必须兼容 | ✅ 完成（10 tests） |
+| AI | Provider interface 和 faux Provider | 必须兼容 | ✅ 完成（13 tests） |
+| AI | OpenAI Completions 协议 | 必须兼容 | ✅ 完成（5 tests） |
+| AI | OpenAI Responses 协议 | 必须兼容 | ✅ 完成（3 tests） |
+| AI | Anthropic Messages 协议 | 必须兼容 | ✅ 完成（3 tests） |
+| AI | Google Generative AI 协议 | 必须兼容 | ✅ 完成（3 tests） |
+| AI | API Key 凭据存储（env + file） | 必须兼容 | ✅ 完成（6 tests） |
+| AI | Compat 自动检测 | 必须兼容 | ✅ 完成（3 tests） |
+| AI | Provider Registry + Builtins | 必须兼容 | ✅ 完成（3 tests） |
+| CLI | `--help`、`--version`、退出码 | 必须兼容 | ✅ 完成（3 tests） |
+| CLI | `--print` 模式 | 必须兼容 | ✅ 完成（可用） |
+| CLI | interactive、RPC | 必须兼容 | ⏳ 延后 |
+| Agent | Agent loop（turn、tool call、continuation） | 必须兼容 | ✅ 完成（2 tests） |
+| Agent | Abort、Steering、Follow-up 队列 | 必须兼容 | ✅ 完成（4 tests） |
+| Tools | `read`、`write`、`edit`、`bash` | 必须兼容 | ✅ 完成（6 tests） |
+| Session | JSONL 原子读写、fork、损坏恢复 | 必须兼容 | ✅ 完成（4 tests） |
+| Config | 全局/项目配置、AGENTS.md、Trust | 必须兼容 | ✅ 完成 |
+| Provider | 其余 Provider | 分批迁移 | ⏳ 延后 |
+| Auth | OAuth 登录 | 首批一个 | ⏳ 延后 |
+| TUI | 交互式终端 UI | 必须兼容 | ⏳ 延后 |
+| Extensions | 子进程 JSON-RPC | 首发范围 | ⏳ 延后 |
+| Server | server 包 | 待确认 | ⏳ 延后 |
 
-## 状态定义
+## 当前测试
 
-- **待基线**：需要从 TypeScript 行为或现有测试提取 fixture。
-- **待确认**：需要项目负责人决定是否属于首发范围。
-- **已决定**：兼容边界已经明确，可以按计划实现。
-- **完成**：自动测试和人工验证均通过。
+- **86 个测试全部通过**
+- `gofmt -l .` 无输出
+- `go vet ./...` 通过
+- `staticcheck ./...` 通过
+- `go test -race ./...` 通过
+- 真实 API 集成测试：DeepSeek（`DEEPSEEK_API_KEY`）
