@@ -10,22 +10,26 @@ import (
 	"time"
 
 	"github.com/DROWNING2003/pi-go/packages/agent/tool/guard"
+	"github.com/DROWNING2003/pi-go/packages/agent/tool/sandbox"
 	"github.com/DROWNING2003/pi-go/packages/ai/model"
 )
 
-// BashTool implements shell command execution with timeout, cancel, and
-// destructive command guarding.
+// BashTool implements shell command execution with timeout, cancel,
+// destructive command guard, and OS-level sandboxing.
 type BashTool struct {
 	workspace      string
 	defaultTimeout time.Duration
 	guard          *guard.Guard
+	sandbox        *sandbox.Manager
 }
 
 func NewBashTool(workspace string) *BashTool {
+	sandboxCfg := sandbox.LoadConfig(workspace)
 	return &BashTool{
 		workspace:      workspace,
 		defaultTimeout: 30 * time.Second,
 		guard:          guard.New(guard.DefaultRules()),
+		sandbox:        sandbox.New(sandboxCfg),
 	}
 }
 
@@ -65,11 +69,30 @@ func (t *BashTool) Execute(ctx context.Context, args json.RawMessage) (*Result, 
 		}, nil
 	}
 
+	// Wrap with sandbox if enabled
+	wrappedCmd := params.Command
+	var sandboxProfileFile string
+	if t.sandbox.IsEnabled() {
+		var err error
+		wrappedCmd, err = t.sandbox.WrapCommand(params.Command, t.workspace)
+		if err != nil {
+			return &Result{
+				Content: []model.ContentBlock{model.NewTextContent(fmt.Sprintf("sandbox error: %v", err))},
+				IsError: true,
+			}, nil
+		}
+		defer func() {
+			if sandboxProfileFile != "" {
+				os.Remove(sandboxProfileFile)
+			}
+		}()
+	}
+
 	// Create context with timeout
 	execCtx, cancel := context.WithTimeout(ctx, t.defaultTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(execCtx, "sh", "-c", params.Command)
+	cmd := exec.CommandContext(execCtx, "sh", "-c", wrappedCmd)
 	if t.workspace != "" {
 		cmd.Dir = t.workspace
 	}
