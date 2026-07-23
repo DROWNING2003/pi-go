@@ -23,19 +23,6 @@ type Header struct {
 	ParentSession string `json:"parentSession,omitempty"`
 }
 
-// Entry is a generic entry in the session JSONL file.
-type Entry struct {
-	Type string `json:"type"`
-	// Message entry fields
-	Role      string          `json:"role,omitempty"`
-	Content   json.RawMessage `json:"content,omitempty"`
-	Timestamp int64           `json:"timestamp,omitempty"`
-	// Tree entry fields
-	Action   string `json:"action,omitempty"`
-	TargetID string `json:"targetId,omitempty"`
-	Label    string `json:"label,omitempty"`
-}
-
 // Session represents an in-memory session with its entries.
 type Session struct {
 	mu      sync.Mutex
