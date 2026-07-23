@@ -2,7 +2,7 @@
 
 Pi 的纯 Go 重写项目。目标是在不依赖 Node.js 的情况下提供完整的 coding agent CLI、Agent runtime、多 Provider、Session、工具调用、RPC 和交互式 TUI。
 
-项目当前处于规格和基础设施阶段。TypeScript 版本仍是行为兼容基准，Go 版本通过迁移门禁前不会替代现有运行时。
+项目当前先实现 Core：`packages/ai`、`packages/agent`、`packages/storage`。TUI、扩展和 server 延后。TypeScript 版本仍是行为兼容基准，Go 版本通过迁移门禁前不会替代现有运行时。
 
 ## 文档
 
@@ -26,7 +26,7 @@ gofmt -w ./cmd ./internal
 go vet ./...
 go test ./...
 go test -race ./...
-go build -trimpath -o ./bin/pi ./cmd/pi
+go build -trimpath -o ./bin/pi ./packages/coding-agent/cmd/pi
 ./bin/pi --help
 ```
 
