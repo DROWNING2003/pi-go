@@ -77,7 +77,7 @@ func buildGoogleRequest(m *provider.ProviderModel, c *provider.Context, opts *pr
 	// Convert messages following google-shared.ts convertMessages logic
 	for _, raw := range c.Messages {
 		role, content := extractRoleContent(raw)
-		msg, err := convertToGoogleContent(m, role, content)
+		msg, err := convertToGoogleContent(role, content)
 		if err != nil || msg == nil {
 			continue
 		}
@@ -100,7 +100,7 @@ func buildGoogleRequest(m *provider.ProviderModel, c *provider.Context, opts *pr
 	return req, nil
 }
 
-func convertToGoogleContent(m *provider.ProviderModel, role string, content json.RawMessage) (*GoogleContent, error) {
+func convertToGoogleContent(role string, content json.RawMessage) (*GoogleContent, error) {
 	msg := &GoogleContent{Role: googleRole(role)}
 
 	switch role {
