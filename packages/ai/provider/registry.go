@@ -148,10 +148,3 @@ func (r *Registry) Stream(ctx context.Context, modelRef string, c *Context, opts
 
 	return dispatch(ctx, m, c, opts), nil
 }
-
-// RegisterBuiltins registers all built-in providers.
-func RegisterBuiltins(r *Registry) {
-	for _, p := range builtinProviders {
-		r.Register(p)
-	}
-}
