@@ -251,6 +251,8 @@ func runPrintMode(stdout, stderr io.Writer, m *provider.ProviderModel, prov *pro
 			return protocol.StreamAnthropicMessages(ctx, client, pm, c, so)
 		case "google-generative-ai":
 			return protocol.StreamGoogleGenerate(ctx, client, pm, c, so)
+		case "bedrock-converse-stream":
+			return protocol.StreamBedrockConverse(ctx, client, pm, c, so)
 		default:
 			ch := make(chan model.StreamEvent, 1)
 			ch <- model.NewErrorEvent(model.StopReasonError, &model.AssistantMessage{ErrorMessage: "unsupported API: " + prov.API})
