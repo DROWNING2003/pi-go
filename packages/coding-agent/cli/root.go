@@ -21,10 +21,8 @@ import (
 	"github.com/DROWNING2003/pi-go/packages/ai/protocol"
 
 	"github.com/DROWNING2003/pi-go/packages/ai/provider"
-	tui2 "github.com/DROWNING2003/pi-go/packages/coding-agent/tui"
 	"github.com/DROWNING2003/pi-go/packages/storage/config"
 	"github.com/DROWNING2003/pi-go/packages/storage/session"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 type options struct {
@@ -176,7 +174,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	}
 
 	if !opts.Print && len(remaining) == 0 {
-		return runTUI(stdout, stderr, m, prov, client, tools, cwd)
+		return runInteractive(stdout, stderr, m, prov, client, tools, cfg, cwd, reg)
 	}
 	return 1
 }
@@ -367,11 +365,13 @@ func resumeSession(stdout, stderr io.Writer, idPrefix string) int {
 	return 0
 }
 
-func runInteractive(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cfg *config.Config, cwd string) int {
-	fmt.Fprintf(stderr, "pi ● %s/%s (type /quit to exit)\n\n", m.Provider, m.ID)
+func runInteractive(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cfg *config.Config, cwd string, reg *provider.Registry) int {
+	fmt.Fprintf(stderr, "pi \u25cf %s/%s  type /help or /quit\n\n", m.Provider, m.ID)
 	scanner := bufio.NewScanner(os.Stdin)
+	sessionMsgs := make([]json.RawMessage, 0)
+
 	for {
-		fmt.Fprint(stderr, "> ")
+		fmt.Fprint(stderr, "\u25b8 ")
 		if !scanner.Scan() {
 			break
 		}
@@ -379,24 +379,46 @@ func runInteractive(stdout, stderr io.Writer, m *provider.ProviderModel, prov *p
 		if input == "" {
 			continue
 		}
-		if input == "/quit" || input == "/exit" {
-			break
+		switch {
+		case input == "/quit" || input == "/exit":
+			return 0
+		case input == "/help":
+			fmt.Fprintln(stderr, "  /quit, /exit  - quit")
+			fmt.Fprintln(stderr, "  /clear        - new session")
+			fmt.Fprintln(stderr, "  /model <ref>  - switch model")
+			fmt.Fprintln(stderr, "  /list         - list models")
+			continue
+		case input == "/clear":
+			sessionMsgs = nil
+			fmt.Fprintln(stderr, "  session cleared")
+			continue
+		case strings.HasPrefix(input, "/model "):
+			ref := strings.TrimPrefix(input, "/model ")
+			if mm := reg.ResolveModel(ref); mm != nil {
+				m = mm
+				fmt.Fprintf(stderr, "  switched to %s/%s\n", m.Provider, m.ID)
+			} else {
+				fmt.Fprintf(stderr, "  model not found: %s\n", ref)
+			}
+			continue
+		case input == "/list":
+			for _, pid := range reg.ListProviders() {
+				prov := reg.GetProvider(pid)
+				if prov == nil {
+					continue
+				}
+				for _, mc := range prov.Models {
+					fmt.Fprintf(stderr, "  %s/%s\n", pid, mc.ID)
+				}
+			}
+			continue
 		}
 		args := []string{input}
 		opts := &options{Print: true}
-		code := runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, args, cwd, nil)
+		code := runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, args, cwd, sessionMsgs)
 		if code != 0 {
-			fmt.Fprintf(stderr, "error: command failed\n")
+			fmt.Fprintf(stderr, "  error\n")
 		}
-	}
-	return 0
-}
-
-func runTUI(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cwd string) int {
-	p := tui2.New(m, prov, client, tools, cwd)
-	if _, err := tea.NewProgram(p, tea.WithAltScreen()).Run(); err != nil {
-		fmt.Fprintf(stderr, "tui error: %v\n", err)
-		return 1
 	}
 	return 0
 }
