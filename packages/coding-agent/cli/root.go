@@ -180,10 +180,27 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 }
 
 func runPiTUI(args []string) int {
-	// Find pi-tui script relative to binary
 	exePath, _ := os.Executable()
-	tuiScript := filepath.Join(filepath.Dir(exePath), "..", "pi-tui", "cli.mjs")
-	cmd := exec.Command("node", append([]string{tuiScript}, args...)...)
+	tuiDir := filepath.Join(filepath.Dir(exePath), "..", "pi-tui")
+	tuiScript := filepath.Join(tuiDir, "cli.mjs")
+	// Run tsx from the pi-tui directory where it's installed
+	tsxBin := filepath.Join(tuiDir, "node_modules", ".bin", "tsx")
+	if _, err := os.Stat(tsxBin); err != nil {
+		// Fallback to npx
+		cmd := exec.Command("npx", append([]string{"--prefix", tuiDir, "tsx", tuiScript}, args...)...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Env = os.Environ()
+		if err := cmd.Run(); err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return exitErr.ExitCode()
+			}
+			return 1
+		}
+		return 0
+	}
+	cmd := exec.Command(tsxBin, append([]string{tuiScript}, args...)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
