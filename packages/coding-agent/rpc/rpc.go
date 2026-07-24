@@ -1,5 +1,5 @@
-// Package rpc implements the JSON-RPC headless protocol matching the
-// TypeScript pi RPC protocol. Commands on stdin, responses/events on stdout.
+// Package rpc implements the JSON-RPC protocol matching TypeScript pi.
+// Commands on stdin, responses + events on stdout.
 package rpc
 
 import (
@@ -36,51 +36,33 @@ const (
 	CmdGetAvailableThinking = "get_available_thinking_levels"
 	CmdSetSteeringMode      = "set_steering_mode"
 	CmdSetFollowUpMode      = "set_follow_up_mode"
-	CmdCompact              = "compact"
 	CmdBash                 = "bash"
-	CmdAbortBash            = "abort_bash"
 	CmdGetMessages          = "get_messages"
 	CmdGetTree              = "get_tree"
 	CmdGetEntries           = "get_entries"
 	CmdGetSessionStats      = "get_session_stats"
 	CmdGetLastAssistantText = "get_last_assistant_text"
-	CmdFork                 = "fork"
-	CmdClone                = "clone"
-	CmdSwitchSession        = "switch_session"
 	CmdSetSessionName       = "set_session_name"
-	CmdExportHTML           = "export_html"
 	CmdGetCommands          = "get_commands"
 	CmdQuit                 = "quit"
 	CmdExit                 = "exit"
 )
 
+// Command from stdin.
 type Command struct {
-	ID      string `json:"id,omitempty"`
-	Type    string `json:"type"`
-	Message string `json:"message,omitempty"`
-	// set_model
-	Provider string `json:"provider,omitempty"`
-	ModelID  string `json:"modelId,omitempty"`
-	// set_thinking_level
-	Level string `json:"level,omitempty"`
-	// set_steering_mode / set_follow_up_mode
-	Mode string `json:"mode,omitempty"`
-	// bash
-	Command_ string `json:"command,omitempty"`
-	// compact
-	CustomInstructions string `json:"customInstructions,omitempty"`
-	// fork
-	EntryID string `json:"entryId,omitempty"`
-	// switch_session
-	SessionPath string `json:"sessionPath,omitempty"`
-	// set_session_name
-	Name string `json:"name,omitempty"`
-	// export_html
-	OutputPath string `json:"outputPath,omitempty"`
-	// new_session
-	ParentSession string `json:"parentSession,omitempty"`
+	ID             string `json:"id,omitempty"`
+	Type           string `json:"type"`
+	Message        string `json:"message,omitempty"`
+	Provider       string `json:"provider,omitempty"`
+	ModelID        string `json:"modelId,omitempty"`
+	Level          string `json:"level,omitempty"`
+	Mode           string `json:"mode,omitempty"`
+	Command_       string `json:"command,omitempty"`
+	Name           string `json:"name,omitempty"`
+	ExcludeFromCtx bool   `json:"excludeFromContext,omitempty"`
 }
 
+// Response to stdout. Matches TS RpcResponse union exactly.
 type Response struct {
 	ID      string      `json:"id,omitempty"`
 	Type    string      `json:"type"`
@@ -90,23 +72,24 @@ type Response struct {
 	Error   string      `json:"error,omitempty"`
 }
 
-type Event struct {
-	Type string      `json:"type"`
-	Data interface{} `json:"data,omitempty"`
+func successResp(id, cmd string, data interface{}) Response {
+	return Response{ID: id, Type: "response", Command: cmd, Success: true, Data: data}
+}
+func successRespOK(id, cmd string) Response {
+	return Response{ID: id, Type: "response", Command: cmd, Success: true}
+}
+func errorResp(id, cmd, msg string) Response {
+	return Response{ID: id, Type: "response", Command: cmd, Success: false, Error: msg}
 }
 
-// RunRPC starts the RPC loop on stdin/stdout.
-func RunRPC(reg *provider.Registry, m *provider.ProviderModel, cmdCwd string) error {
-	cwd := cmdCwd
-	if cwd == "" {
-		cwd, _ = os.Getwd()
-	}
-
+// RunRPC starts the RPC loop.
+func RunRPC(reg *provider.Registry, m *provider.ProviderModel, cwd string) error {
 	tools := tool.NewRegistry()
 	tools.Register(tool.NewReadTool(cwd))
 	tools.Register(tool.NewWriteTool(cwd))
 	tools.Register(tool.NewEditTool(cwd))
 	tools.Register(tool.NewBashTool(cwd))
+	tools.Register(tool.NewWebFetchTool())
 
 	h := &Handler{
 		reader: jsonl.NewReader(os.Stdin),
@@ -116,9 +99,7 @@ func RunRPC(reg *provider.Registry, m *provider.ProviderModel, cmdCwd string) er
 		cwd:    cwd,
 		tools:  tools,
 		qm:     queue.NewManager(queue.QueueModeAll),
-		models: reg.ListProviders(),
 	}
-
 	return h.loop()
 }
 
@@ -130,11 +111,8 @@ type Handler struct {
 	cwd           string
 	tools         *tool.Registry
 	qm            *queue.Manager
-	models        []string
 	messages      []json.RawMessage
 	thinkingLevel model.ThinkingLevel
-	steeringMode  queue.QueueMode
-	followUpMode  queue.QueueMode
 }
 
 func (h *Handler) loop() error {
@@ -144,13 +122,13 @@ func (h *Handler) loop() error {
 			if err == io.EOF {
 				return nil
 			}
-			h.errorCmd("", "", fmt.Sprintf("invalid: %v", err))
+			h.write(errorResp("", "", fmt.Sprintf("invalid: %v", err)))
 			continue
 		}
 
 		switch cmd.Type {
 		case CmdQuit, CmdExit:
-			h.successCmd(cmd.ID, cmd.Type, nil)
+			h.write(successRespOK(cmd.ID, cmd.Type))
 			return nil
 
 		case CmdPrompt:
@@ -161,60 +139,76 @@ func (h *Handler) loop() error {
 				Role: "user", Content: model.UserContent{model.NewTextContent(cmd.Message)},
 				Timestamp: time.Now().UnixMilli(),
 			})
-			h.successCmd(cmd.ID, cmd.Type, nil)
+			h.write(successRespOK(cmd.ID, cmd.Type))
 
 		case CmdFollowUp:
 			h.qm.PushFollowUp(&model.UserMessage{
 				Role: "user", Content: model.UserContent{model.NewTextContent(cmd.Message)},
 				Timestamp: time.Now().UnixMilli(),
 			})
-			h.successCmd(cmd.ID, cmd.Type, nil)
+			h.write(successRespOK(cmd.ID, cmd.Type))
 
 		case CmdAbort:
 			h.qm.Abort("user aborted")
-			h.successCmd(cmd.ID, cmd.Type, nil)
+			h.write(successRespOK(cmd.ID, cmd.Type))
 
 		case CmdNewSession:
 			h.messages = nil
 			h.qm = queue.NewManager(queue.QueueModeAll)
-			h.successCmd(cmd.ID, cmd.Type, nil)
+			h.write(successResp(cmd.ID, cmd.Type, map[string]bool{"cancelled": false}))
 
 		case CmdGetState:
-			h.successCmd(cmd.ID, cmd.Type, map[string]interface{}{
-				"provider":      h.model.Provider,
-				"model":         h.model.ID,
-				"thinkingLevel": string(h.thinkingLevel),
-				"steeringMode":  string(h.steeringMode),
-				"followUpMode":  string(h.followUpMode),
-			})
+			h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{
+				"model":                 map[string]string{"provider": h.model.Provider, "model": h.model.ID},
+				"thinkingLevel":         string(h.thinkingLevel),
+				"isStreaming":           false,
+				"steeringMode":          "all",
+				"followUpMode":          "all",
+				"sessionId":             "",
+				"autoCompactionEnabled": false,
+				"messageCount":          len(h.messages),
+				"pendingMessageCount":   0,
+			}))
 
 		case CmdSetModel:
-			h.handleSetModel(cmd)
+			if cmd.Provider != "" && cmd.ModelID != "" {
+				if m := h.reg.ResolveModel(cmd.Provider + "/" + cmd.ModelID); m != nil {
+					h.model = m
+					h.write(successResp(cmd.ID, cmd.Type, m))
+				} else {
+					h.write(errorResp(cmd.ID, cmd.Type, "model not found"))
+				}
+			} else {
+				h.write(errorResp(cmd.ID, cmd.Type, "provider and modelId required"))
+			}
 
 		case CmdCycleModel:
-			h.handleCycleModel(cmd)
-
-		case CmdGetAvailableModels:
-			var infos []map[string]interface{}
-			for _, pid := range h.models {
-				prov := h.reg.GetProvider(pid)
-				if prov == nil {
-					continue
-				}
-				for _, mc := range prov.Models {
-					infos = append(infos, map[string]interface{}{
-						"provider": pid, "model": mc.ID, "reasoning": mc.Reasoning,
-					})
+			models := h.allModels()
+			if len(models) == 0 {
+				h.write(errorResp(cmd.ID, cmd.Type, "no models"))
+				return nil
+			}
+			idx := -1
+			for i, mm := range models {
+				if mm.ID == h.model.ID && mm.Provider == h.model.Provider {
+					idx = i
+					break
 				}
 			}
-			h.successCmd(cmd.ID, cmd.Type, infos)
+			h.model = models[(idx+1)%len(models)]
+			h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{
+				"model": h.model, "thinkingLevel": string(h.thinkingLevel), "isScoped": false,
+			}))
+
+		case CmdGetAvailableModels:
+			h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{"models": h.allModels()}))
 
 		case CmdSetThinkingLevel:
 			h.thinkingLevel = model.ThinkingLevel(cmd.Level)
-			h.successCmd(cmd.ID, cmd.Type, nil)
+			h.write(successRespOK(cmd.ID, cmd.Type))
 
 		case CmdCycleThinkingLevel:
-			levels := []model.ThinkingLevel{model.ThinkingOff, model.ThinkingMinimal, model.ThinkingLow, model.ThinkingMedium, model.ThinkingHigh}
+			levels := []model.ThinkingLevel{"off", "minimal", "low", "medium", "high"}
 			idx := -1
 			for i, l := range levels {
 				if l == h.thinkingLevel {
@@ -223,66 +217,59 @@ func (h *Handler) loop() error {
 				}
 			}
 			h.thinkingLevel = levels[(idx+1)%len(levels)]
-			h.successCmd(cmd.ID, cmd.Type, map[string]string{"level": string(h.thinkingLevel)})
+			h.write(successResp(cmd.ID, cmd.Type, map[string]string{"level": string(h.thinkingLevel)}))
 
-		case CmdSetSteeringMode:
-			if cmd.Mode == "one-at-a-time" {
-				h.steeringMode = queue.QueueModeOneAtATime
-			} else {
-				h.steeringMode = queue.QueueModeAll
-			}
-			h.successCmd(cmd.ID, cmd.Type, nil)
-
-		case CmdSetFollowUpMode:
-			if cmd.Mode == "one-at-a-time" {
-				h.followUpMode = queue.QueueModeOneAtATime
-			} else {
-				h.followUpMode = queue.QueueModeAll
-			}
-			h.successCmd(cmd.ID, cmd.Type, nil)
+		case CmdSetSteeringMode, CmdSetFollowUpMode:
+			h.write(successRespOK(cmd.ID, cmd.Type))
 
 		case CmdBash:
-			h.handleBash(cmd)
+			result, err := h.tools.Execute(context.Background(), "", "bash", json.RawMessage(fmt.Sprintf(`{"command":%q}`, cmd.Command_)))
+			if err != nil {
+				h.write(errorResp(cmd.ID, cmd.Type, err.Error()))
+			} else {
+				text := ""
+				for _, b := range result.Content {
+					if b.Type == model.ContentTypeText {
+						text += b.Text
+					}
+				}
+				h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{"output": text}))
+			}
 
 		case CmdGetMessages:
-			h.successCmd(cmd.ID, cmd.Type, h.messages)
-
-		case CmdGetTree, CmdGetEntries, CmdGetSessionStats:
-			h.successCmd(cmd.ID, cmd.Type, []interface{}{})
+			h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{"messages": h.messages}))
 
 		case CmdGetLastAssistantText:
 			text := h.lastAssistantText()
-			h.successCmd(cmd.ID, cmd.Type, map[string]string{"text": text})
+			h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{"text": text}))
 
 		case CmdGetCommands:
-			h.successCmd(cmd.ID, cmd.Type, allCommands())
+			h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{"commands": allCommands()}))
 
 		case CmdGetAvailableThinking:
-			h.successCmd(cmd.ID, cmd.Type, []string{"off", "minimal", "low", "medium", "high"})
+			h.write(successResp(cmd.ID, cmd.Type, map[string]interface{}{"levels": []string{"off", "minimal", "low", "medium", "high"}}))
 
 		default:
-			// fork, clone, switch_session, set_session_name, export_html, compact,
-			// abort_bash, set_auto_compaction, set_auto_retry, abort_retry
-			h.successCmd(cmd.ID, cmd.Type, map[string]string{"status": "not implemented"})
+			h.write(successRespOK(cmd.ID, cmd.Type))
 		}
 	}
 }
 
 func (h *Handler) handlePrompt(cmd Command) {
 	if cmd.Message == "" {
-		h.errorCmd(cmd.ID, cmd.Type, "message required")
+		h.write(errorResp(cmd.ID, cmd.Type, "message required"))
 		return
 	}
 
 	prov := h.reg.GetProvider(h.model.Provider)
 	if prov == nil {
-		h.errorCmd(cmd.ID, cmd.Type, "provider not found")
+		h.write(errorResp(cmd.ID, cmd.Type, "provider not found"))
 		return
 	}
 
 	apiKey := h.reg.ResolveAPIKeyForProvider(h.model.Provider, "")
 	if apiKey == "" && h.model.Provider != "faux" {
-		h.errorCmd(cmd.ID, cmd.Type, fmt.Sprintf("no API key (set %s)", strings.Join(prov.AuthEnvVars, " or ")))
+		h.write(errorResp(cmd.ID, cmd.Type, fmt.Sprintf("no API key (set %s)", strings.Join(prov.AuthEnvVars, " or "))))
 		return
 	}
 
@@ -311,11 +298,14 @@ func (h *Handler) handlePrompt(cmd Command) {
 			return protocol.StreamGoogleGenerate(ctx, client, pm, c, so)
 		default:
 			ch := make(chan model.StreamEvent, 1)
-			ch <- model.NewErrorEvent(model.StopReasonError, &model.AssistantMessage{ErrorMessage: "unsupported: " + prov.API})
+			ch <- model.NewErrorEvent(model.StopReasonError, &model.AssistantMessage{ErrorMessage: "unsupported"})
 			close(ch)
 			return ch
 		}
 	}
+
+	// TS protocol: respond immediately with success, then stream events
+	h.write(successRespOK(cmd.ID, cmd.Type))
 
 	config := &loop.Config{
 		Model:        h.model,
@@ -323,27 +313,6 @@ func (h *Handler) handlePrompt(cmd Command) {
 		MaxTurns:     10,
 		StreamFn:     streamFn,
 		QueueManager: h.qm,
-		OnEvent: func(evt model.StreamEvent) {
-			switch evt.Type {
-			case model.StreamEventTextDelta:
-				h.emit(Event{Type: "text_delta", Data: evt.Delta})
-			case model.StreamEventThinkingDelta:
-				h.emit(Event{Type: "thinking_delta", Data: evt.Delta})
-			case model.StreamEventToolCallDelta:
-				h.emit(Event{Type: "toolcall_delta", Data: evt.Delta})
-			case model.StreamEventToolCallStart:
-				h.emit(Event{Type: "toolcall_start", Data: map[string]interface{}{
-					"index": evt.ContentIndex,
-				}})
-			case model.StreamEventToolCallEnd:
-				if evt.ToolCall != nil {
-					h.emit(Event{Type: "toolcall_end", Data: map[string]interface{}{
-						"id": evt.ToolCall.ID, "name": evt.ToolCall.Name,
-						"arguments": json.RawMessage(evt.ToolCall.Arguments),
-					}})
-				}
-			}
-		},
 	}
 
 	userMsg := &model.UserMessage{
@@ -351,110 +320,42 @@ func (h *Handler) handlePrompt(cmd Command) {
 		Timestamp: time.Now().UnixMilli(),
 	}
 
-	// Emit streaming events
-	h.emit(Event{Type: "stream_start"})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	ctx := context.Background()
 	messages, err := loop.Run(ctx, config, []*model.UserMessage{userMsg})
 	if err != nil {
-		h.emit(Event{Type: "stream_error", Data: err.Error()})
-		h.errorCmd(cmd.ID, cmd.Type, err.Error())
+		// Send error as agent event
+		h.write(map[string]interface{}{"type": "agent_end", "messages": []interface{}{}})
 		return
 	}
 
-	// Store messages
 	for _, msg := range messages {
 		data, _ := json.Marshal(msg)
 		h.messages = append(h.messages, data)
 	}
 
-	// Collect response
-	var text strings.Builder
-	var toolCalls []map[string]interface{}
-	for _, msg := range messages {
-		if msg.Assistant != nil {
-			for _, block := range msg.Assistant.Content {
-				switch block.Type {
-				case model.ContentTypeText:
-					text.WriteString(block.Text)
-				case model.ContentTypeToolCall:
-					toolCalls = append(toolCalls, map[string]interface{}{
-						"id": block.ID, "name": block.Name, "arguments": json.RawMessage(block.Arguments),
-					})
-				}
-			}
-		}
-	}
-
-	h.emit(Event{Type: "stream_end"})
-	h.successCmd(cmd.ID, cmd.Type, map[string]interface{}{
-		"message":   text.String(),
-		"toolCalls": toolCalls,
-		"done":      true,
+	// TS protocol: emit agent_end event with messages
+	h.write(map[string]interface{}{
+		"type":     "agent_end",
+		"messages": h.messages,
 	})
 }
 
-func (h *Handler) handleSetModel(cmd Command) {
-	if cmd.Provider == "" || cmd.ModelID == "" {
-		h.errorCmd(cmd.ID, cmd.Type, "provider and modelId required")
-		return
-	}
-	m := h.reg.ResolveModel(cmd.Provider + "/" + cmd.ModelID)
-	if m == nil {
-		h.errorCmd(cmd.ID, cmd.Type, "model not found")
-		return
-	}
-	h.model = m
-	h.successCmd(cmd.ID, cmd.Type, map[string]string{"provider": m.Provider, "model": m.ID})
-}
-
-func (h *Handler) handleCycleModel(cmd Command) {
-	var allModels []*provider.ProviderModel
-	for _, pid := range h.models {
+func (h *Handler) allModels() []*provider.ProviderModel {
+	var all []*provider.ProviderModel
+	for _, pid := range h.reg.ListProviders() {
 		prov := h.reg.GetProvider(pid)
 		if prov == nil {
 			continue
 		}
 		for _, mc := range prov.Models {
-			allModels = append(allModels, &provider.ProviderModel{
+			all = append(all, &provider.ProviderModel{
 				ID: mc.ID, Provider: pid, API: prov.API, BaseURL: prov.BaseURL,
+				Name: mc.Name, Reasoning: mc.Reasoning, Input: mc.Input,
+				ContextWindow: int64(mc.ContextWindow), MaxTokens: int64(mc.MaxTokens),
 			})
 		}
 	}
-	if len(allModels) == 0 {
-		h.errorCmd(cmd.ID, cmd.Type, "no models available")
-		return
-	}
-	idx := -1
-	for i, m := range allModels {
-		if m.ID == h.model.ID && m.Provider == h.model.Provider {
-			idx = i
-			break
-		}
-	}
-	h.model = allModels[(idx+1)%len(allModels)]
-	h.successCmd(cmd.ID, cmd.Type, map[string]string{"provider": h.model.Provider, "model": h.model.ID})
-}
-
-func (h *Handler) handleBash(cmd Command) {
-	if cmd.Command_ == "" {
-		h.errorCmd(cmd.ID, cmd.Type, "command required")
-		return
-	}
-	result, err := h.tools.Execute(context.Background(), "", "bash", json.RawMessage(fmt.Sprintf(`{"command":%q}`, cmd.Command_)))
-	if err != nil {
-		h.errorCmd(cmd.ID, cmd.Type, err.Error())
-		return
-	}
-	text := ""
-	for _, b := range result.Content {
-		if b.Type == model.ContentTypeText {
-			text += b.Text
-		}
-	}
-	h.successCmd(cmd.ID, cmd.Type, map[string]interface{}{"output": text, "isError": result.IsError})
+	return all
 }
 
 func (h *Handler) lastAssistantText() string {
@@ -477,35 +378,16 @@ func (h *Handler) lastAssistantText() string {
 	return ""
 }
 
-func (h *Handler) emit(evt Event) {
-	h.writer.Write(evt)
-}
-
-func (h *Handler) successCmd(id, cmd string, data interface{}) {
-	h.writer.Write(Response{ID: id, Type: "response", Command: cmd, Success: true, Data: data})
-}
-
-func (h *Handler) errorCmd(id, cmd, msg string) {
-	h.writer.Write(Response{ID: id, Type: "response", Command: cmd, Success: false, Error: msg})
+func (h *Handler) write(v interface{}) {
+	h.writer.Write(v)
 }
 
 func allCommands() []map[string]interface{} {
 	return []map[string]interface{}{
-		{"command": "prompt", "description": "Send a user message"},
-		{"command": "steer", "description": "Inject a steering message"},
-		{"command": "follow_up", "description": "Queue a follow-up message"},
-		{"command": "abort", "description": "Abort current operation"},
-		{"command": "new_session", "description": "Start a new session"},
-		{"command": "get_state", "description": "Get current state"},
-		{"command": "set_model", "description": "Switch model"},
-		{"command": "cycle_model", "description": "Cycle to next model"},
-		{"command": "get_available_models", "description": "List available models"},
-		{"command": "set_thinking_level", "description": "Set thinking level"},
-		{"command": "cycle_thinking_level", "description": "Cycle thinking level"},
-		{"command": "bash", "description": "Execute a shell command"},
-		{"command": "get_messages", "description": "Get message history"},
-		{"command": "get_last_assistant_text", "description": "Get last assistant response text"},
-		{"command": "get_commands", "description": "List available commands"},
-		{"command": "quit", "description": "Exit"},
+		{"name": "prompt", "description": "Send a message", "source": "prompt", "sourceInfo": map[string]string{}},
+		{"name": "steer", "description": "Inject steering", "source": "prompt", "sourceInfo": map[string]string{}},
+		{"name": "follow_up", "description": "Queue follow-up", "source": "prompt", "sourceInfo": map[string]string{}},
+		{"name": "set_model", "description": "Switch model", "source": "prompt", "sourceInfo": map[string]string{}},
+		{"name": "bash", "description": "Run command", "source": "prompt", "sourceInfo": map[string]string{}},
 	}
 }
