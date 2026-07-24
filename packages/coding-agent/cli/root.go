@@ -180,7 +180,10 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 }
 
 func runPiTUI(args []string) int {
-	cmd := exec.Command("pi", args...)
+	// Find pi-tui script relative to binary
+	exePath, _ := os.Executable()
+	tuiScript := filepath.Join(filepath.Dir(exePath), "..", "pi-tui", "cli.mjs")
+	cmd := exec.Command("node", append([]string{tuiScript}, args...)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
