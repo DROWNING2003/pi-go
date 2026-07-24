@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -173,10 +173,25 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 		return runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, remaining, cwd, prevMsgs)
 	}
 
-	if !opts.Print && len(remaining) == 0 {
-		return runInteractive(stdout, stderr, m, prov, client, tools, cfg, cwd, reg)
+	if !opts.Print && len(remaining) == 0 && !opts.RPC {
+		return runPiTUI(args)
 	}
 	return 1
+}
+
+func runPiTUI(args []string) int {
+	cmd := exec.Command("pi", args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = os.Environ()
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode()
+		}
+		return 1
+	}
+	return 0
 }
 
 func runPrintMode(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cfg *config.Config, opts *options, args []string, cwd string, prevMsgs []json.RawMessage) int {
@@ -362,63 +377,5 @@ func resumeSession(stdout, stderr io.Writer, idPrefix string) int {
 		return 1
 	}
 	fmt.Fprintf(stderr, "resuming session %s (%d messages)...\n", s.Header.ID, len(s.Entries))
-	return 0
-}
-
-func runInteractive(stdout, stderr io.Writer, m *provider.ProviderModel, prov *provider.ProviderConfig, client *protocol.HTTPClient, tools *tool.Registry, cfg *config.Config, cwd string, reg *provider.Registry) int {
-	fmt.Fprintf(stderr, "pi \u25cf %s/%s  type /help or /quit\n\n", m.Provider, m.ID)
-	scanner := bufio.NewScanner(os.Stdin)
-	sessionMsgs := make([]json.RawMessage, 0)
-
-	for {
-		fmt.Fprint(stderr, "\u25b8 ")
-		if !scanner.Scan() {
-			break
-		}
-		input := strings.TrimSpace(scanner.Text())
-		if input == "" {
-			continue
-		}
-		switch {
-		case input == "/quit" || input == "/exit":
-			return 0
-		case input == "/help":
-			fmt.Fprintln(stderr, "  /quit, /exit  - quit")
-			fmt.Fprintln(stderr, "  /clear        - new session")
-			fmt.Fprintln(stderr, "  /model <ref>  - switch model")
-			fmt.Fprintln(stderr, "  /list         - list models")
-			continue
-		case input == "/clear":
-			sessionMsgs = nil
-			fmt.Fprintln(stderr, "  session cleared")
-			continue
-		case strings.HasPrefix(input, "/model "):
-			ref := strings.TrimPrefix(input, "/model ")
-			if mm := reg.ResolveModel(ref); mm != nil {
-				m = mm
-				fmt.Fprintf(stderr, "  switched to %s/%s\n", m.Provider, m.ID)
-			} else {
-				fmt.Fprintf(stderr, "  model not found: %s\n", ref)
-			}
-			continue
-		case input == "/list":
-			for _, pid := range reg.ListProviders() {
-				prov := reg.GetProvider(pid)
-				if prov == nil {
-					continue
-				}
-				for _, mc := range prov.Models {
-					fmt.Fprintf(stderr, "  %s/%s\n", pid, mc.ID)
-				}
-			}
-			continue
-		}
-		args := []string{input}
-		opts := &options{Print: true}
-		code := runPrintMode(stdout, stderr, m, prov, client, tools, cfg, opts, args, cwd, sessionMsgs)
-		if code != 0 {
-			fmt.Fprintf(stderr, "  error\n")
-		}
-	}
 	return 0
 }
