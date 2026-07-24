@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { TUI, Text, Editor, Markdown, ProcessTerminal, matchesKey } from "./src/index.ts";
+import { TUI, Text, Input, Markdown, ProcessTerminal, matchesKey } from "./src/index.ts";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -15,23 +15,11 @@ const backend = spawn(goBin, ["--rpc"], {
 const terminal = new ProcessTerminal({});
 const tui = new TUI(terminal);
 
-tui.addChild(new Text("pi  Go + TS TUI"));
+tui.addChild(new Text("pi  Go + TS TUI  /quit to exit"));
 tui.addChild(new Text(""));
 
-const editorTheme = {
-  borderColor: (s) => s,
-  borderStyle: "single",
-  cursor: "▌",
-  cursorInactive: " ",
-  selection: (s) => s,
-  lineNumbers: false,
-  placeholder: (s) => s,
-};
-
-const editor = new Editor(tui, editorTheme, {
-  minHeight: 3,
-  maxHeight: 10,
-  placeholder: "Type a message... (/quit to exit)",
+const input = new Input(tui, {
+  placeholder: "Type a message...",
 });
 
 let streaming = false;
@@ -47,35 +35,25 @@ backend.stdout.on("data", (chunk) => {
       const msg = JSON.parse(line);
       if (msg.type === "agent_end" && msg.messages) {
         for (const m of msg.messages) {
-          if (m.role === "user") continue;
           if (m.role === "assistant" && m.content) {
             for (const b of m.content) {
               if (b.type === "text") {
-                tui.addChild(new Text(""));
                 tui.addChild(new Markdown(b.text, tui));
               } else if (b.type === "toolCall") {
                 tui.addChild(new Text(`  [${b.name}] ${JSON.stringify(b.arguments)}`));
               }
             }
           }
-          if (m.role === "toolResult") {
-            let t = "";
-            for (const b of (m.content || [])) {
-              if (b.type === "text") t += b.text;
-            }
-            if (t.length > 200) t = t.slice(0, 200) + "...";
-            tui.addChild(new Text(`  [${m.toolName}] ${t}`));
-          }
         }
         streaming = false;
-        editor.value = "";
-        editor.focus();
+        input.value = "";
+        input.focus();
       }
     } catch {}
   }
 });
 
-editor.onSubmit = (text) => {
+input.onSubmit = (text) => {
   if (streaming) return;
   text = text.trim();
   if (!text) return;
@@ -85,12 +63,12 @@ editor.onSubmit = (text) => {
     process.exit(0);
   }
   streaming = true;
-  tui.addChild(new Text(`▸ ${text}`));
+  tui.addChild(new Text("▸ " + text));
   backend.stdin.write(JSON.stringify({ type: "prompt", message: text }) + "\n");
 };
 
-tui.addChild(editor);
-tui.setFocus(editor);
+tui.addChild(input);
+tui.setFocus(input);
 
 tui.addInputListener((data) => {
   if (matchesKey(data, "ctrl+c")) {
