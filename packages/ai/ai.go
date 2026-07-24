@@ -175,7 +175,6 @@ var (
 	WithFauxTokensPerSecond = provider.WithFauxTokensPerSecond
 )
 
-
 type (
 	// ProviderHeaders maps header names to values.
 	ProviderHeaders = model.ProviderHeaders

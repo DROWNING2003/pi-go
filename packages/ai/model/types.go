@@ -166,9 +166,9 @@ type SimpleStreamOptions struct {
 // --- Image generation types ---
 
 type ImagesInputContent struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-	Data string `json:"data,omitempty"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Data     string `json:"data,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 }
 
@@ -197,24 +197,24 @@ type ImagesOptions struct {
 }
 
 type AssistantImages struct {
-	API          string              `json:"api"`
-	Provider     string              `json:"provider"`
-	Model        string              `json:"model"`
+	API          string                `json:"api"`
+	Provider     string                `json:"provider"`
+	Model        string                `json:"model"`
 	Output       []ImagesOutputContent `json:"output"`
-	ResponseID   string              `json:"responseId,omitempty"`
-	Usage        *Usage              `json:"usage,omitempty"`
-	StopReason   ImagesStopReason    `json:"stopReason"`
-	ErrorMessage string              `json:"errorMessage,omitempty"`
-	Timestamp    int64               `json:"timestamp"`
+	ResponseID   string                `json:"responseId,omitempty"`
+	Usage        *Usage                `json:"usage,omitempty"`
+	StopReason   ImagesStopReason      `json:"stopReason"`
+	ErrorMessage string                `json:"errorMessage,omitempty"`
+	Timestamp    int64                 `json:"timestamp"`
 }
 
 type ImagesModel struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	API      string   `json:"api"`
-	Provider string   `json:"provider"`
-	BaseURL  string   `json:"baseUrl"`
-	Output   []string `json:"output"`
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	API      string    `json:"api"`
+	Provider string    `json:"provider"`
+	BaseURL  string    `json:"baseUrl"`
+	Output   []string  `json:"output"`
 	Cost     ModelCost `json:"cost"`
 }
 
@@ -237,33 +237,33 @@ type KnownAPI string
 type KnownProvider string
 
 const (
-	APIOpenAICompletions     KnownAPI = "openai-completions"
-	APIMistralConversations  KnownAPI = "mistral-conversations"
-	APIOpenAIResponses       KnownAPI = "openai-responses"
-	APIAzureOpenAIResponses  KnownAPI = "azure-openai-responses"
-	APIOpenAICodexResponses  KnownAPI = "openai-codex-responses"
-	APIAnthropicMessages     KnownAPI = "anthropic-messages"
-	APIBedrockConverse       KnownAPI = "bedrock-converse-stream"
-	APIGoogleGenerative      KnownAPI = "google-generative-ai"
-	APIGoogleVertex          KnownAPI = "google-vertex"
-	APIPiMessages            KnownAPI = "pi-messages"
+	APIOpenAICompletions    KnownAPI = "openai-completions"
+	APIMistralConversations KnownAPI = "mistral-conversations"
+	APIOpenAIResponses      KnownAPI = "openai-responses"
+	APIAzureOpenAIResponses KnownAPI = "azure-openai-responses"
+	APIOpenAICodexResponses KnownAPI = "openai-codex-responses"
+	APIAnthropicMessages    KnownAPI = "anthropic-messages"
+	APIBedrockConverse      KnownAPI = "bedrock-converse-stream"
+	APIGoogleGenerative     KnownAPI = "google-generative-ai"
+	APIGoogleVertex         KnownAPI = "google-vertex"
+	APIPiMessages           KnownAPI = "pi-messages"
 )
 
 const (
-	ProviderAmazonBedrock     KnownProvider = "amazon-bedrock"
-	ProviderAnthropic         KnownProvider = "anthropic"
-	ProviderGoogle            KnownProvider = "google"
-	ProviderGoogleVertex      KnownProvider = "google-vertex"
-	ProviderOpenAI            KnownProvider = "openai"
-	ProviderAzureOpenAI       KnownProvider = "azure-openai-responses"
-	ProviderOpenAICodex       KnownProvider = "openai-codex"
-	ProviderDeepSeek          KnownProvider = "deepseek"
-	ProviderXAI               KnownProvider = "xai"
-	ProviderGroq              KnownProvider = "groq"
-	ProviderCerebras          KnownProvider = "cerebras"
-	ProviderOpenRouter        KnownProvider = "openrouter"
-	ProviderMistral           KnownProvider = "mistral"
-	ProviderTogether          KnownProvider = "together"
-	ProviderFireworks         KnownProvider = "fireworks"
-	ProviderHuggingFace       KnownProvider = "huggingface"
+	ProviderAmazonBedrock KnownProvider = "amazon-bedrock"
+	ProviderAnthropic     KnownProvider = "anthropic"
+	ProviderGoogle        KnownProvider = "google"
+	ProviderGoogleVertex  KnownProvider = "google-vertex"
+	ProviderOpenAI        KnownProvider = "openai"
+	ProviderAzureOpenAI   KnownProvider = "azure-openai-responses"
+	ProviderOpenAICodex   KnownProvider = "openai-codex"
+	ProviderDeepSeek      KnownProvider = "deepseek"
+	ProviderXAI           KnownProvider = "xai"
+	ProviderGroq          KnownProvider = "groq"
+	ProviderCerebras      KnownProvider = "cerebras"
+	ProviderOpenRouter    KnownProvider = "openrouter"
+	ProviderMistral       KnownProvider = "mistral"
+	ProviderTogether      KnownProvider = "together"
+	ProviderFireworks     KnownProvider = "fireworks"
+	ProviderHuggingFace   KnownProvider = "huggingface"
 )
