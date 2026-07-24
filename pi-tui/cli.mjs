@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const goBin = path.join(__dirname, "..", "bin", "pi");
 
 const backend = spawn(goBin, ["--rpc"], {
-  stdio: ["pipe", "pipe", "inherit"],
+  stdio: ["pipe", "pipe", "ignore"],
   env: process.env,
 });
 
