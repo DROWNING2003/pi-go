@@ -25,3 +25,13 @@ var builtinProviders = []*ProviderConfig{
 	{ID: "nvidia", Name: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1", API: "openai-completions", Auth: AuthConfig{Type: "api_key", Name: "NVIDIA API key", EnvVars: []string{"NVIDIA_API_KEY"}}, AuthEnvVars: []string{"NVIDIA_API_KEY"}, Models: []ModelConfig{{ID: "meta/llama-3.3-70b-instruct", Name: "Llama 3.3 70B", Reasoning: false, Input: []string{"text"}, ContextWindow: 131072, MaxTokens: 8192}}},
 	{ID: "faux", Name: "Faux (testing)", BaseURL: "", API: "faux", Auth: AuthConfig{Type: "api_key", Name: "Faux", EnvVars: []string{}}, AuthEnvVars: []string{}, Models: []ModelConfig{{ID: "faux-1", Name: "Faux Model", Reasoning: false, Input: []string{"text", "image"}, ContextWindow: 128000, MaxTokens: 16384}}},
 }
+
+// Google Vertex AI (enterprise)
+var googleVertexProvider = &ProviderConfig{
+	ID: "google-vertex", Name: "Google Vertex AI", BaseURL: "https://{LOCATION}-aiplatform.googleapis.com/v1beta1", API: "google-generative-ai",
+	Auth:        AuthConfig{Type: "api_key", Name: "Google Vertex", EnvVars: []string{"GOOGLE_VERTEX_API_KEY", "GOOGLE_API_KEY"}},
+	AuthEnvVars: []string{"GOOGLE_VERTEX_API_KEY", "GOOGLE_API_KEY"},
+	Models: []ModelConfig{
+		{ID: "gemini-2.0-flash", Name: "Gemini 2.0 Flash", Reasoning: false, Input: []string{"text", "image"}, ContextWindow: 1048576, MaxTokens: 8192},
+	},
+}
