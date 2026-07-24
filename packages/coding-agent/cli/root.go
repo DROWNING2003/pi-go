@@ -28,11 +28,14 @@ type options struct {
 	Print     bool
 	List      bool
 	Continue  bool
+	NoSession bool
 	RPC       bool
-	Resume    string
+	ResumeID  string
 	Model     string
 	Provider  string
 	System    string
+	Session   string
+	Fork      string
 	Workspace string
 	Version   string
 	Args      []string
@@ -44,8 +47,11 @@ func parseFlags(args []string) (*options, []string, error) {
 	flags.BoolVar(&opts.Print, "print", false, "Non-interactive print mode")
 	flags.BoolVar(&opts.List, "list", false, "List saved sessions")
 	flags.BoolVar(&opts.Continue, "continue", false, "Continue the latest session")
+	flags.BoolVar(&opts.NoSession, "no-session", false, "Don't save session")
 	flags.BoolVar(&opts.RPC, "rpc", false, "Run in JSON-RPC headless mode")
-	flags.StringVar(&opts.Resume, "resume", "", "Resume a session by ID prefix")
+	flags.StringVar(&opts.ResumeID, "resume", "", "Resume a session by ID prefix")
+	flags.StringVar(&opts.Session, "session", "", "Session file path or ID")
+	flags.StringVar(&opts.Fork, "fork", "", "Fork a session by path or ID")
 	flags.StringVar(&opts.Model, "model", "", "Model to use (e.g. deepseek/deepseek-chat)")
 	flags.StringVar(&opts.Provider, "provider", "", "Provider to use (e.g. deepseek)")
 	flags.StringVar(&opts.System, "system", "", "System prompt override")
@@ -82,8 +88,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, version string) int 
 	if opts.List {
 		return listSessions(stdout, stderr)
 	}
-	if opts.Resume != "" {
-		return resumeSession(stdout, stderr, opts.Resume)
+	if opts.ResumeID != "" {
+		return resumeSession(stdout, stderr, opts.ResumeID)
 	}
 	if opts.RPC {
 		return runRPCMode(stdout, stderr, version, opts.Model)
