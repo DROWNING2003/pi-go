@@ -29,15 +29,6 @@ func FormatError(err error) string {
 }
 
 // ContentText extracts text from content blocks.
-func ContentText(blocks []ContentBlock) string {
-	var result string
-	for _, b := range blocks {
-		if b.Type == ContentTypeText {
-			result += b.Text
-		}
-	}
-	return result
-}
 
 // ParseStreamingJSON attempts to parse partial JSON, returning what's valid.
 func ParseStreamingJSON(partial string) json.RawMessage {

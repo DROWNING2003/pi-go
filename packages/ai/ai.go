@@ -174,6 +174,26 @@ var (
 	WithFauxTokensPerSecond = provider.WithFauxTokensPerSecond
 )
 
+
+type (
+	// ProviderHeaders maps header names to values.
+	ProviderHeaders = model.ProviderHeaders
+	// ProviderEnv maps env var names to values.
+	ProviderEnv = model.ProviderEnv
+	// SimpleStreamOptions combines stream options with reasoning.
+	SimpleStreamOptions = model.SimpleStreamOptions
+	// ThinkingBudgets holds thinking token budgets.
+	ThinkingBudgets = model.ThinkingBudgets
+	// TextSignatureV1 is for OpenAI response message metadata.
+	TextSignatureV1 = model.TextSignatureV1
+	// ImagesModel describes an image generation model.
+	ImagesModel = model.ImagesModel
+	// ImagesContext is the input context for image generation.
+	ImagesContext = model.ImagesContext
+	// AssistantImages is the response from image generation.
+	AssistantImages = model.AssistantImages
+)
+
 // --- Protocol types ---
 
 type (
