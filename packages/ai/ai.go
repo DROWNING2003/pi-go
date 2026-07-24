@@ -146,6 +146,7 @@ type (
 
 // Registry constructors.
 var (
+	CalculateCost      = model.CalculateCost
 	NewRegistry        = provider.NewRegistry
 	RegisterBuiltins   = provider.RegisterBuiltins
 	NewCredentialStore = provider.NewCredentialStore
